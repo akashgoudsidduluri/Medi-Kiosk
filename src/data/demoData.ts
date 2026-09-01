@@ -60,6 +60,7 @@ export interface DemoScenario {
     priority: "routine" | "priority" | "urgent";
     reasons: string[];
     confidence: number;
+    timestamp?: string;
   };
 }
 
@@ -140,16 +141,17 @@ export const demoScenarios: Record<string, DemoScenario> = {
         type: "investigation",
       },
     ],
-    triage: {
-      priority: "routine",
-      reasons: [
-        "Mild symptom severity (3/10)",
-        "No red-flag indicators present",
-        "Gradual onset without alarming features",
-        "No associated systemic symptoms",
-      ],
-      confidence: 88,
-    },
+  triage: {
+    priority: "routine" as const,
+    reasons: [
+      "Mild symptom severity (3/10)",
+      "No red-flag indicators present",
+      "Gradual onset without alarming features",
+      "No associated systemic symptoms",
+    ],
+    confidence: 88,
+    timestamp: new Date().toISOString(),
+  },
   },
   priority: {
     id: "priority-001",
@@ -249,17 +251,18 @@ export const demoScenarios: Record<string, DemoScenario> = {
         type: "assessment",
       },
     ],
-    triage: {
-      priority: "priority",
-      reasons: [
-        "Worsening symptoms over 3 months",
-        "Moderate severity (6/10)",
-        "Elevated liver enzymes detected",
-        "Weight loss reported — requires further evaluation",
-        "Symptoms not responding adequately to current medication",
-      ],
-      confidence: 82,
-    },
+  triage: {
+    priority: "priority" as const,
+    reasons: [
+      "Worsening symptoms over 3 months",
+      "Moderate severity (6/10)",
+      "Elevated liver enzymes detected",
+      "Weight loss reported — requires further evaluation",
+      "Symptoms not responding adequately to current medication",
+    ],
+    confidence: 82,
+    timestamp: new Date().toISOString(),
+  },
   },
   urgent: {
     id: "urgent-001",
@@ -345,7 +348,7 @@ export const demoScenarios: Record<string, DemoScenario> = {
       },
     ],
     triage: {
-      priority: "urgent",
+      priority: "urgent" as const,
       reasons: [
         "Potential red-flag indicators detected: chest pain + breathlessness",
         "Severe symptom intensity (8/10)",
@@ -354,6 +357,7 @@ export const demoScenarios: Record<string, DemoScenario> = {
         "Symptoms not relieved by rest — immediate medical attention required",
       ],
       confidence: 94,
+      timestamp: new Date().toISOString(),
     },
   },
 };

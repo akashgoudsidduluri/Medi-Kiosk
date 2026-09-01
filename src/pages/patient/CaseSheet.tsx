@@ -261,7 +261,7 @@ export default function CaseSheet() {
             <CardContent>
               {documents.length > 0 ? (
                 <div className="space-y-3">
-                  {documents.map((doc: { id: string; fileName: string; extractedData: { date: string; medication: string; observation: string } }) => (
+                  {documents.map((doc) => (
                     <div key={doc.id} className="p-3 rounded-lg bg-parchment border border-border">
                       <div className="flex items-center gap-2 mb-2">
                         <FileText className="w-4 h-4 text-vintage-teal" />
@@ -351,7 +351,7 @@ export default function CaseSheet() {
                       Confidence: {Math.round(triage.confidence * 100)}% — Simulated
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {new Date(triage.timestamp).toLocaleString("en-IN")}
+                      {triage.timestamp ? new Date(triage.timestamp).toLocaleString("en-IN") : "—"}
                     </p>
                   </div>
                 </div>

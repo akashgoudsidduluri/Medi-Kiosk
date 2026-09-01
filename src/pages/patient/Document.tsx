@@ -247,7 +247,7 @@ export default function DocumentUpload() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {documents.map((doc: { id: string; fileName: string; extractedData: { date: string; medication: string } }) => (
+                {documents.map((doc) => (
                   <div key={doc.id} className="flex items-center gap-3 p-3 rounded-lg bg-parchment border border-border">
                     <FileText className="w-4 h-4 text-vintage-teal flex-shrink-0" />
                     <div className="flex-1 min-w-0">

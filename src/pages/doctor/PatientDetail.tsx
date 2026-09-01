@@ -216,7 +216,7 @@ export default function PatientDetail() {
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(ayush).map(([key, value]) => (
+                    {Object.entries(ayush).map(([key, value]: [string, string]) => (
                       <div key={key} className={`p-2 rounded-lg text-xs ${value ? "bg-vintage-gold/5" : "bg-muted/30"}`}>
                         <p className="font-semibold text-muted-foreground capitalize">
                           {key.replace(/([A-Z])/g, " $1").trim()}
@@ -245,7 +245,7 @@ export default function PatientDetail() {
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {triage.reasons.map((reason, i) => (
+                    {triage.reasons.map((reason: string, i: number) => (
                       <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-vintage-blue/5">
                         <CheckCircle className="w-4 h-4 text-vintage-blue mt-0.5 flex-shrink-0" />
                         <span className="text-sm text-foreground">{reason}</span>

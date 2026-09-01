@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 export interface SOCRATESResponse {
+  [key: string]: string;
   site: string;
   onset: string;
   character: string;
@@ -14,6 +15,7 @@ export interface SOCRATESResponse {
 }
 
 export interface AYUSHAssessment {
+  [key: string]: string;
   prakriti: string;
   vikriti: string;
   sara: string;
@@ -42,6 +44,7 @@ export interface DocumentExtraction {
     medication?: number;
     observation?: number;
   };
+  [key: string]: unknown;
 }
 
 export interface TimelineEvent {
@@ -56,7 +59,7 @@ export interface TriageResult {
   priority: "routine" | "priority" | "urgent";
   reasons: string[];
   confidence: number;
-  timestamp: string;
+  timestamp?: string;
 }
 
 export interface DoctorVerification {
@@ -184,10 +187,10 @@ export const usePatientStore = create<PatientState>()(
       // Actions
       setPatient: (data) => set((state) => ({ ...state, ...data })),
       setChiefComplaint: (complaint) => set({ chiefComplaint: complaint }),
-      setSOCRATES: (data) =>
-        set((state) => ({ socrates: { ...state.socrates, ...data } })),
-      setAYUSH: (data) =>
-        set((state) => ({ ayush: { ...state.ayush, ...data } })),
+      setSOCRATES: (data: Partial<SOCRATESResponse>) =>
+        set((state) => ({ socrates: { ...state.socrates, ...data } as SOCRATESResponse })),
+      setAYUSH: (data: Partial<AYUSHAssessment>) =>
+        set((state) => ({ ayush: { ...state.ayush, ...data } as AYUSHAssessment })),
       addDocument: (doc) =>
         set((state) => ({ documents: [...state.documents, doc] })),
       setTriage: (triage) => set({ triage }),
