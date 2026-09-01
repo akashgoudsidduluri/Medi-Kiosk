@@ -9,23 +9,43 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes, useLocation } from "react-router";
 import "./index.css";
 
-// Lazy load route components for better code splitting
+// Lazy load route components
 const Landing = lazy(() => import("./pages/Landing.tsx"));
 const AuthPage = lazy(() => import("./pages/Auth.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
-// Simple loading fallback for route transitions
+// Patient pages
+const PatientLogin = lazy(() => import("./pages/patient/Login.tsx"));
+const PatientDashboard = lazy(() => import("./pages/patient/Dashboard.tsx"));
+const Interview = lazy(() => import("./pages/patient/Interview.tsx"));
+const Assessment = lazy(() => import("./pages/patient/Assessment.tsx"));
+const DocumentUpload = lazy(() => import("./pages/patient/Document.tsx"));
+const Timeline = lazy(() => import("./pages/patient/Timeline.tsx"));
+const Triage = lazy(() => import("./pages/patient/Triage.tsx"));
+const CaseSheet = lazy(() => import("./pages/patient/CaseSheet.tsx"));
+
+// Doctor pages
+const DoctorLogin = lazy(() => import("./pages/doctor/Login.tsx"));
+const DoctorDashboard = lazy(() => import("./pages/doctor/Dashboard.tsx"));
+const PatientDetail = lazy(() => import("./pages/doctor/PatientDetail.tsx"));
+
+// Other pages
+const Integration = lazy(() => import("./pages/Integration.tsx"));
+const Technology = lazy(() => import("./pages/Technology.tsx"));
+
+// Simple loading fallback
 function RouteLoading() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-pulse text-muted-foreground">Loading...</div>
+    <div className="min-h-screen flex items-center justify-center bg-[#FDF8F0]">
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-[#3B5998] border-t-transparent rounded-full animate-spin" />
+        <span className="text-sm text-[#8B7355]">Loading...</span>
+      </div>
     </div>
   );
 }
 
-/** Silent error boundary — if VlyToolbar crashes it renders nothing instead of
- *  crashing the whole app (e.g. hook errors in WebContainer environment). */
 class ToolbarErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean }
@@ -42,7 +62,6 @@ class ToolbarErrorBoundary extends React.Component<
   }
 }
 
-/** Hard guard so runtime errors never leave the preview as a blank page. */
 class RootErrorBoundary extends React.Component<
   { children: React.ReactNode },
   { hasError: boolean; message: string; stack: string }
@@ -61,14 +80,14 @@ class RootErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+        <div className="min-h-screen flex items-center justify-center bg-[#FDF8F0] text-[#3D2B1F] p-6">
           <div className="max-w-lg text-center">
             <p className="text-sm font-semibold">Preview runtime error</p>
-            <p className="mt-2 text-xs text-muted-foreground break-words">
+            <p className="mt-2 text-xs text-[#8B7355] break-words">
               {this.state.message}
             </p>
             {this.state.stack && (
-              <pre className="mt-3 text-left text-[10px] leading-4 text-muted-foreground/80 max-h-40 overflow-auto rounded border border-border/60 p-2">
+              <pre className="mt-3 text-left text-[10px] leading-4 text-[#8B7355]/80 max-h-40 overflow-auto rounded border border-[#D4C5B0]/60 p-2">
                 {this.state.stack}
               </pre>
             )}
@@ -81,8 +100,6 @@ class RootErrorBoundary extends React.Component<
 }
 
 const convex = new ConvexReactClient(import.meta.env.VITE_CONVEX_URL as string);
-
-
 
 function RouteSyncer() {
   const location = useLocation();
@@ -107,7 +124,6 @@ function RouteSyncer() {
   return null;
 }
 
-
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <RootErrorBoundary>
@@ -119,11 +135,28 @@ createRoot(document.getElementById("root")!).render(
           <RouteSyncer />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
+              {/* Public routes */}
               <Route path="/" element={<Landing />} />
-              <Route
-                path="/auth"
-                element={<AuthPage redirectAfterAuth="/dashboard" />}
-              />
+              <Route path="/auth" element={<AuthPage redirectAfterAuth="/dashboard" />} />
+              <Route path="/technology" element={<Technology />} />
+              <Route path="/integration" element={<Integration />} />
+
+              {/* Patient routes */}
+              <Route path="/patient/login" element={<PatientLogin />} />
+              <Route path="/patient/dashboard" element={<PatientDashboard />} />
+              <Route path="/patient/interview" element={<Interview />} />
+              <Route path="/patient/assessment" element={<Assessment />} />
+              <Route path="/patient/document" element={<DocumentUpload />} />
+              <Route path="/patient/timeline" element={<Timeline />} />
+              <Route path="/patient/triage" element={<Triage />} />
+              <Route path="/patient/casesheet" element={<CaseSheet />} />
+
+              {/* Doctor routes */}
+              <Route path="/doctor/login" element={<DoctorLogin />} />
+              <Route path="/doctor/dashboard" element={<DoctorDashboard />} />
+              <Route path="/doctor/patient" element={<PatientDetail />} />
+
+              {/* Protected routes */}
               <Route
                 path="/dashboard"
                 element={
@@ -132,6 +165,8 @@ createRoot(document.getElementById("root")!).render(
                   </RequireAuth>
                 }
               />
+
+              {/* Fallback */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
