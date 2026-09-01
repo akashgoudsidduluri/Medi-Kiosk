@@ -1,20 +1,21 @@
-import { api } from "@/convex/_generated/api";
-import { useAuthActions } from "@convex-dev/auth/react";
-import { useConvexAuth, useQuery } from "convex/react";
+/**
+ * Mock Auth Hook — Demo / Prototype
+ *
+ * Replaces Convex-based auth with a simple localStorage-based mock.
+ * The actual patient and doctor login flows (/patient/login, /doctor/login)
+ * handle their own state via the patientStore / Zustand.
+ *
+ * TODO: Replace this with a real auth provider (Convex, Supabase, etc.)
+ *       when moving to production.
+ */
+
+import { useContext } from "react";
+import { MockAuthContext } from "@/components/MockAuthProvider";
 
 export function useAuth() {
-  const { isLoading: isAuthLoading, isAuthenticated } = useConvexAuth();
-  const user = useQuery(api.users.currentUser);
-  const { signIn, signOut } = useAuthActions();
-
-  // Derive isLoading directly from the dependencies instead of managing separate state
-  const isLoading = isAuthLoading || user === undefined;
-
-  return {
-    isLoading,
-    isAuthenticated,
-    user,
-    signIn,
-    signOut,
-  };
+  const ctx = useContext(MockAuthContext);
+  if (!ctx) {
+    throw new Error("useAuth must be used within MockAuthProvider");
+  }
+  return ctx;
 }
