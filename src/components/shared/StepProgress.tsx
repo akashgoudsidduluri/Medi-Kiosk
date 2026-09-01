@@ -16,6 +16,8 @@ interface StepProgressProps {
 const defaultSteps: Step[] = [
   { id: "login", label: "Patient Login", shortLabel: "Login" },
   { id: "consent", label: "Consent", shortLabel: "Consent" },
+  { id: "language", label: "Language", shortLabel: "Language" },
+  { id: "inputMode", label: "Input Mode", shortLabel: "Mode" },
   { id: "interview", label: "Clinical Interview", shortLabel: "Interview" },
   { id: "ayush", label: "AYUSH Assessment", shortLabel: "AYUSH" },
   { id: "documents", label: "Document Upload", shortLabel: "Docs" },

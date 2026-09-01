@@ -51,7 +51,7 @@ export default function PatientLogin() {
     });
 
     setIsLoading(false);
-    navigate("/patient/dashboard");
+    navigate("/patient/consent"); // Mandatory: consent before assessment
   };
 
   return (

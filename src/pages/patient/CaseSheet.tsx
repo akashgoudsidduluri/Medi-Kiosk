@@ -7,6 +7,7 @@ import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { PriorityBadge } from "@/components/shared/PriorityBadge";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
+import { queueService } from "@/services/queue/queueService";
 import {
   ArrowLeft,
   ArrowRight,
@@ -125,7 +126,7 @@ export default function CaseSheet() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {triage && <PriorityBadge priority={triage.priority} size="lg" />}
+                  {triage && <PriorityBadge priority={triage.priority as any} size="lg" />}
                   <Button variant="outline" size="sm" onClick={() => window.print()}>
                     <Printer className="w-4 h-4 mr-1" />
                     Print
@@ -345,7 +346,7 @@ export default function CaseSheet() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4 mb-3">
-                  <PriorityBadge priority={triage.priority} size="lg" />
+                  <PriorityBadge priority={(triage?.priority as any) || "routine"} />
                   <div>
                     <p className="text-xs text-muted-foreground">
                       Confidence: {Math.round(triage.confidence * 100)}% — Simulated
@@ -431,11 +432,13 @@ export default function CaseSheet() {
           <Button
             className="bg-vintage-blue hover:bg-vintage-blue/90"
             onClick={() => {
+              // Push patient to doctor queue via the queue service boundary
+              queueService.pushToQueue(store);
               setVerification({ status: "pending" });
-              navigate("/doctor/login");
+              navigate("/doctor/dashboard");
             }}
           >
-            Send to Doctor
+            Send to Doctor Queue
             <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>

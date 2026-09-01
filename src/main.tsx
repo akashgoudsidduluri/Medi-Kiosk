@@ -16,6 +16,9 @@ const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 // Patient pages
 const PatientLogin = lazy(() => import("./pages/patient/Login.tsx"));
+const Consent = lazy(() => import("./pages/patient/Consent.tsx"));
+const Language = lazy(() => import("./pages/patient/Language.tsx"));
+const InputMode = lazy(() => import("./pages/patient/InputMode.tsx"));
 const PatientDashboard = lazy(() => import("./pages/patient/Dashboard.tsx"));
 const Interview = lazy(() => import("./pages/patient/Interview.tsx"));
 const Assessment = lazy(() => import("./pages/patient/Assessment.tsx"));
@@ -32,6 +35,9 @@ const PatientDetail = lazy(() => import("./pages/doctor/PatientDetail.tsx"));
 // Other pages
 const Integration = lazy(() => import("./pages/Integration.tsx"));
 const Technology = lazy(() => import("./pages/Technology.tsx"));
+
+// Shared components
+import { DemoSelector } from "./components/shared/DemoSelector";
 
 // Simple loading fallback
 function RouteLoading() {
@@ -132,6 +138,7 @@ createRoot(document.getElementById("root")!).render(
       <MockAuthProvider>
         <BrowserRouter>
           <RouteSyncer />
+          <DemoSelector />
           <Suspense fallback={<RouteLoading />}>
             <Routes>
               {/* Public routes */}
@@ -142,6 +149,9 @@ createRoot(document.getElementById("root")!).render(
 
               {/* Patient routes */}
               <Route path="/patient/login" element={<PatientLogin />} />
+              <Route path="/patient/consent" element={<Consent />} />
+              <Route path="/patient/language" element={<Language />} />
+              <Route path="/patient/input-mode" element={<InputMode />} />
               <Route path="/patient/dashboard" element={<PatientDashboard />} />
               <Route path="/patient/interview" element={<Interview />} />
               <Route path="/patient/assessment" element={<Assessment />} />

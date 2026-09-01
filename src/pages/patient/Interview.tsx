@@ -8,8 +8,7 @@ import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { aiService } from "@/services/aiService";
-import { bhashiniService } from "@/services/bhashiniService";
+import { getAsrService, getTtsService, getAiService } from "@/services/serviceRegistry";
 import {
   Mic,
   MicOff,
@@ -22,6 +21,8 @@ import {
   Volume2,
   FileText,
   AlertCircle,
+  Touchpad,
+  Hand,
 } from "lucide-react";
 
 const socratesLabels: Record<string, { label: string; description: string }> = {
@@ -57,7 +58,7 @@ interface ChatMessage {
 
 export default function Interview() {
   const navigate = useNavigate();
-  const { chiefComplaint, socrates, setSOCRATES, setChiefComplaint, setStep, interviewComplete, setPatient } = usePatientStore();
+  const { chiefComplaint, socrates, setSOCRATES, setChiefComplaint, setStep, interviewComplete, setPatient, inputMode, setInputMode } = usePatientStore();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
   const [isListening, setIsListening] = useState(false);
@@ -102,35 +103,70 @@ export default function Interview() {
   };
 
   const handleVoiceInput = async () => {
+    const asrService = getAsrService();
+
     if (isListening) {
       setIsListening(false);
-      // Simulate transcription
-      setIsProcessing(true);
-      addMessage("patient", "(Processing voice input...)");
-      await new Promise((r) => setTimeout(r, 1500));
-
-      const result = await bhashiniService.transcribeAudio(
-        new Blob(),
-        "Hindi"
-      );
-
-      // Remove the processing message
-      setMessages((prev) => prev.filter((m) => m.content !== "(Processing voice input...)"));
-      addMessage("patient", result.englishInterpretation);
-
-      if (phase === "complaint") {
-        setChiefComplaint(result.englishInterpretation);
-        setPhase("interview");
-        await generateFollowUp(result.englishInterpretation, {});
-      } else {
-        await processAnswer(result.englishInterpretation);
-      }
-      setIsProcessing(false);
+      asrService.stopListening();
       return;
+    }
+
+    if (inputMode !== "voice") {
+      setInputMode("voice");
     }
 
     setIsListening(true);
     addMessage("patient", "🎙️ Listening...");
+    
+    // We expect the language store to have the selected language, defaulting to English
+    const asrLanguage = usePatientStore.getState().language || "English";
+
+    asrService.startListening(asrLanguage, (result) => {
+      if (result.isFinal) {
+        setIsListening(false);
+        setIsProcessing(true);
+        
+        // Replace the "Listening..." message with the actual transcript
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg && lastMsg.role === "patient" && lastMsg.content === "🎙️ Listening...") {
+            lastMsg.content = result.text;
+          } else {
+             newMessages.push({
+              id: `${Date.now()}-${Math.random()}`,
+              role: "patient",
+              content: result.text,
+              timestamp: new Date().toISOString(),
+            });
+          }
+          return newMessages;
+        });
+
+        // Process the final text
+        handlePatientResponse(result.text).finally(() => setIsProcessing(false));
+      } else {
+        // Update the interim transcript
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          const lastMsg = newMessages[newMessages.length - 1];
+          if (lastMsg && lastMsg.role === "patient" && lastMsg.content.includes("Listening")) {
+            lastMsg.content = result.text + " (Listening...)";
+          }
+          return newMessages;
+        });
+      }
+    });
+  };
+
+  const handlePatientResponse = async (text: string) => {
+    if (phase === "complaint") {
+      setChiefComplaint(text);
+      setPhase("interview");
+      await generateFollowUp(text, socrates);
+    } else {
+      await processAnswer(text);
+    }
   };
 
   const handleTextSubmit = async (e: React.FormEvent) => {
@@ -140,14 +176,10 @@ export default function Interview() {
     const value = inputValue.trim();
     setInputValue("");
     addMessage("patient", value);
-
-    if (phase === "complaint") {
-      setChiefComplaint(value);
-      setPhase("interview");
-      await generateFollowUp(value, {});
-    } else {
-      await processAnswer(value);
-    }
+    
+    setIsProcessing(true);
+    await handlePatientResponse(value);
+    setIsProcessing(false);
   };
 
   const processAnswer = async (answer: string) => {
@@ -185,9 +217,17 @@ export default function Interview() {
   };
 
   const generateFollowUp = async (complaint: string, currentSocrates: Record<string, string>) => {
-    const question = await aiService.generateFollowUpQuestion(complaint, currentSocrates);
-    setCurrentQuestion(question);
-    addMessage("ai", question);
+    const aiService = getAiService();
+    const nextQ = await aiService.getNextQuestion(currentSocrates as any, complaint);
+    
+    setCurrentQuestion(nextQ.question);
+    addMessage("ai", nextQ.question);
+    
+    // Auto-speak if input mode is voice
+    if (inputMode === "voice") {
+      const ttsService = getTtsService();
+      ttsService.speak(nextQ.question, usePatientStore.getState().language || "English");
+    }
   };
 
   const answeredCount = socratesOrder.filter(
@@ -202,7 +242,7 @@ export default function Interview() {
         <div className="mb-4">
           <StepProgress
             currentStep="interview"
-            completedSteps={["login", "consent"]}
+            completedSteps={["login", "consent", "language"]}
           />
         </div>
 

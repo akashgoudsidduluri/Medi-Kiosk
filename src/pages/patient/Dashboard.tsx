@@ -8,7 +8,7 @@ import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { demoScenarios, languages } from "@/data/demoData";
+import { languages, demoScenariosMap } from "@/data/demoData";
 import {
   User,
   Globe,
@@ -56,7 +56,7 @@ export default function PatientDashboard() {
     setSelectedScenario(scenarioKey);
     setIsLoading(true);
 
-    const scenario = demoScenarios[scenarioKey];
+    const scenario = demoScenariosMap[scenarioKey];
     store.setPatient({
       name: scenario.patient.name,
       age: scenario.patient.age,
@@ -64,12 +64,12 @@ export default function PatientDashboard() {
       language: scenario.patient.language,
       mobileNumber: scenario.patient.mobileNumber,
       abhaId: scenario.patient.abhaId,
-      chiefComplaint: scenario.chiefComplaint,
-      socrates: scenario.socrates,
-      ayush: scenario.ayush,
-      documents: scenario.documents,
-      timeline: scenario.timeline,
-      triage: scenario.triage,
+      chiefComplaint: scenario.history.chiefComplaint,
+      socrates: { ...scenario.history, site: scenario.history.site, onset: scenario.history.onset, character: scenario.history.character, radiation: scenario.history.radiation, associatedSymptoms: scenario.history.associatedSymptoms, timing: scenario.history.timing, exacerbatingFactors: scenario.history.exacerbatingFactors, relievingFactors: scenario.history.relievingFactors, severity: scenario.history.severity },
+      ayush: scenario.ayush as any,
+      documents: scenario.documents as any,
+      timeline: scenario.timeline as any,
+      triage: scenario.triage as any,
       interviewComplete: true,
       ayushComplete: true,
     });

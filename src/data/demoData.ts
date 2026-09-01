@@ -1,6 +1,8 @@
 export interface DemoScenario {
   id: string;
   name: string;
+  description: string;
+  expectedPriority: "routine" | "priority" | "urgent";
   priority: "routine" | "priority" | "urgent";
   patient: {
     name: string;
@@ -10,8 +12,8 @@ export interface DemoScenario {
     mobileNumber: string;
     abhaId: string;
   };
-  chiefComplaint: string;
-  socrates: {
+  history: {
+    chiefComplaint: string;
     site: string;
     onset: string;
     character: string;
@@ -64,10 +66,14 @@ export interface DemoScenario {
   };
 }
 
-export const demoScenarios: Record<string, DemoScenario> = {
-  routine: {
-    id: "routine-001",
-    name: "Routine Assessment",
+
+// Array format used by DemoSelector component
+export const demoScenarios: DemoScenario[] = [
+  {
+    id: "scenario-1",
+    name: "Routine",
+    description: "Mild knee pain, 2 weeks duration",
+    expectedPriority: "routine",
     priority: "routine",
     patient: {
       name: "Suresh Rao",
@@ -77,8 +83,8 @@ export const demoScenarios: Record<string, DemoScenario> = {
       mobileNumber: "9876543210",
       abhaId: "ABHA-DEMO-789012",
     },
-    chiefComplaint: "Mild joint pain in right knee for 2 weeks",
-    socrates: {
+    history: {
+      chiefComplaint: "Mild joint pain in right knee for 2 weeks",
       site: "Right knee, medial aspect",
       onset: "Gradual, 2 weeks ago",
       character: "Dull, aching pain",
@@ -153,9 +159,11 @@ export const demoScenarios: Record<string, DemoScenario> = {
     timestamp: new Date().toISOString(),
   },
   },
-  priority: {
-    id: "priority-001",
-    name: "Priority Assessment",
+  {
+    id: "scenario-2",
+    name: "Priority",
+    description: "Worsening abdominal pain, 3 months",
+    expectedPriority: "priority",
     priority: "priority",
     patient: {
       name: "Ravi Kumar",
@@ -165,8 +173,8 @@ export const demoScenarios: Record<string, DemoScenario> = {
       mobileNumber: "9876543211",
       abhaId: "ABHA-DEMO-345678",
     },
-    chiefComplaint: "Abdominal discomfort with bloating for 3 months, worsening",
-    socrates: {
+    history: {
+      chiefComplaint: "Abdominal discomfort with bloating for 3 months, worsening",
       site: "Epigastric region, extending to left hypochondrium",
       onset: "Gradual onset 3 months ago, worsening over last 2 weeks",
       character: "Heavy, pressing sensation with intermittent cramping",
@@ -264,9 +272,11 @@ export const demoScenarios: Record<string, DemoScenario> = {
     timestamp: new Date().toISOString(),
   },
   },
-  urgent: {
-    id: "urgent-001",
-    name: "Urgent Assessment",
+  {
+    id: "scenario-3",
+    name: "High Risk",
+    description: "Chest pain + breathlessness, acute onset",
+    expectedPriority: "urgent",
     priority: "urgent",
     patient: {
       name: "Anita Sharma",
@@ -276,8 +286,8 @@ export const demoScenarios: Record<string, DemoScenario> = {
       mobileNumber: "9876543212",
       abhaId: "ABHA-DEMO-901234",
     },
-    chiefComplaint: "Chest discomfort with breathlessness since this morning",
-    socrates: {
+    history: {
+      chiefComplaint: "Chest discomfort with breathlessness since this morning",
       site: "Retrosternal, radiating to left arm and jaw",
       onset: "Sudden onset this morning at 6:30 AM",
       character: "Tight, crushing sensation",
@@ -360,6 +370,13 @@ export const demoScenarios: Record<string, DemoScenario> = {
       timestamp: new Date().toISOString(),
     },
   },
+];
+
+// Legacy record format for backward compatibility
+export const demoScenariosMap: Record<string, DemoScenario> = {
+  routine: demoScenarios[0],
+  priority: demoScenarios[1],
+  urgent: demoScenarios[2],
 };
 
 export const languages = [
@@ -377,6 +394,13 @@ export const languages = [
   { code: "as", name: "Assamese", native: "অসমীয়া" },
   { code: "ur", name: "Urdu", native: "اردو" },
 ];
+
+// Format used by Language.tsx
+export const demoLanguages = languages.map(l => ({
+  code: l.code,
+  name: l.name,
+  nativeName: l.native,
+}));
 
 export const opdStats = {
   todaysOPD: 96,

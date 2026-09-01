@@ -91,6 +91,39 @@ export default function Technology() {
             message="This page clearly separates ACTUAL PROTOTYPE IMPLEMENTATION from INTENDED PRODUCTION INTEGRATION."
           />
 
+          {/* System Status Block */}
+          <Card className="vintage-card bg-vintage-blue/5 border-vintage-blue/20">
+            <CardHeader className="pb-3">
+              <div className="flex items-center gap-2">
+                <Shield className="w-4 h-4 text-vintage-blue" />
+                <CardTitle className="text-sm tracking-wide uppercase" style={{ fontFamily: "Georgia, serif" }}>
+                  System Status
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2">
+                {[
+                  { name: "AI Interview", status: "LOCAL / DEMO" },
+                  { name: "Voice ASR", status: "BROWSER / FALLBACK" },
+                  { name: "Voice TTS", status: "BROWSER" },
+                  { name: "OCR", status: "TESSERACT.JS" },
+                  { name: "Triage", status: "LOCAL RULE ENGINE" },
+                  { name: "FHIR", status: "FHIR R4 GENERATED" },
+                  { name: "ABDM", status: "SIMULATED" },
+                  { name: "HIS", status: "INTEGRATION-READY" },
+                ].map((sys) => (
+                  <div key={sys.name} className="flex justify-between items-center py-1 border-b border-vintage-blue/10 last:border-0">
+                    <span className="text-sm font-medium text-foreground">{sys.name}</span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-white border border-vintage-blue/20 text-vintage-blue">
+                      {sys.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Architecture Diagram */}
           <Card className="vintage-card overflow-hidden">
             <CardHeader>

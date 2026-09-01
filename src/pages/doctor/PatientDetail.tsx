@@ -8,7 +8,8 @@ import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { PriorityBadge } from "@/components/shared/PriorityBadge";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { fhirService, type FHIRBundle } from "@/services/fhirService";
+import { getFhirService, getAbdmService } from "@/services/serviceRegistry";
+import { type FHIRBundle } from "@/types";
 import {
   ArrowLeft,
   User,
@@ -90,7 +91,8 @@ export default function PatientDetail() {
 
   const handleGenerateFHIR = async () => {
     setIsGenerating(true);
-    const bundle = await fhirService.generateBundle({
+    const fhirServiceInstance = getFhirService();
+    const bundle = await fhirServiceInstance.generateBundle({
       patient: { id: name || "demo", name: name || "Demo Patient", age: age || 40, gender: gender || "Male", abhaId: abhaId || "DEMO-ABHA", mobileNumber: store.mobileNumber },
       chiefComplaint: chiefComplaint || "Demo complaint",
       socrates,
@@ -105,7 +107,8 @@ export default function PatientDetail() {
   const handleABDMPush = async () => {
     if (!fhirBundle) return;
     setIsGenerating(true);
-    const result = await fhirService.pushToABDM(fhirBundle);
+    const abdmService = getAbdmService();
+    const result = await abdmService.pushHealthRecord(fhirBundle);
     setAbdmResult(result.message);
     setIsGenerating(false);
   };
@@ -153,7 +156,7 @@ export default function PatientDetail() {
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  {triage && <PriorityBadge priority={triage.priority} size="lg" />}
+                  <PriorityBadge priority={(triage?.priority as any) || "routine"} />
                   <div className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase ${
                     verification.status === "confirmed"
                       ? "bg-routine-green/10 text-routine-green"

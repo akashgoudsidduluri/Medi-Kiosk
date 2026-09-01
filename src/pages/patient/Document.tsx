@@ -7,7 +7,7 @@ import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { ocrService } from "@/services/ocrService";
+import { getOcrService } from "@/services/serviceRegistry";
 import {
   ArrowRight,
   ArrowLeft,
@@ -44,17 +44,27 @@ export default function DocumentUpload() {
     setIsProcessing(true);
 
     try {
-      const result = await ocrService.processDocument(selectedFile);
-      const entities = await ocrService.extractEntities(result.rawText);
+      const ocrService = getOcrService();
+      const result = await ocrService.extractText(selectedFile);
+
+      // Parse extracted text into structured fields (simple heuristic)
+      const lines = result.text.split('\n').filter(l => l.trim());
+      const dateLine = lines.find(l => /\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}/.test(l) || /jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec/i.test(l));
+      const medLine = lines.find(l => /mg|tablet|capsule|syrup|drop|injection|rx/i.test(l));
+      const obsLine = lines.find(l => /diagnosis|observation|finding|note|assessment/i.test(l)) || lines[lines.length - 1];
 
       setExtractedData({
-        date: entities.date,
-        medication: entities.medication,
-        observation: entities.observation,
-        confidence: entities.confidence,
+        date: dateLine?.trim() || "Not detected",
+        medication: medLine?.trim() || "Not detected",
+        observation: obsLine?.trim() || result.text.substring(0, 100),
+        confidence: {
+          date: dateLine ? Math.round(result.confidence) : 0,
+          medication: medLine ? Math.round(result.confidence) : 0,
+          observation: Math.round(result.confidence * 0.9),
+        },
       });
-    } catch {
-      console.error("OCR processing failed");
+    } catch (err) {
+      console.error("OCR processing failed:", err);
     }
 
     setIsProcessing(false);

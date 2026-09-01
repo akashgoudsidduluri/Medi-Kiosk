@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { fhirService, type FHIRBundle } from "@/services/fhirService";
+import { getFhirService, getAbdmService } from "@/services/serviceRegistry";
+import { type FHIRBundle } from "@/types";
 import {
   ArrowLeft,
   ArrowRight,
@@ -30,6 +31,7 @@ export default function Integration() {
 
   const handleGenerateFHIR = async () => {
     setIsGenerating(true);
+    const fhirService = getFhirService();
     const bundle = await fhirService.generateBundle({
       patient: {
         id: store.id || "demo-patient",
@@ -52,7 +54,8 @@ export default function Integration() {
   const handleABDMPush = async () => {
     if (!fhirBundle) return;
     setIsGenerating(true);
-    const result = await fhirService.pushToABDM(fhirBundle);
+    const abdmService = getAbdmService();
+    const result = await abdmService.pushHealthRecord(fhirBundle);
     setAbdmResult(result.message);
     setIsGenerating(false);
   };
@@ -60,8 +63,8 @@ export default function Integration() {
   const handleHISPush = async () => {
     if (!fhirBundle) return;
     setIsGenerating(true);
-    const result = await fhirService.pushToHIS(fhirBundle);
-    setHisResult(result.message);
+    await new Promise(r => setTimeout(r, 500));
+    setHisResult("Simulated HIS push successful");
     setIsGenerating(false);
   };
 
@@ -166,7 +169,7 @@ export default function Integration() {
 
                   {/* Resource List */}
                   <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {fhirBundle.entry.map((entry, i) => {
+                    {fhirBundle.entry.map((entry: any, i: number) => {
                       const resource = entry.resource;
                       return (
                         <div key={i} className="p-2 rounded-lg bg-vintage-teal/5 border border-vintage-teal/20">

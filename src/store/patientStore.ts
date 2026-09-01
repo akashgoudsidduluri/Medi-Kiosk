@@ -1,73 +1,15 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-
-export interface SOCRATESResponse {
-  [key: string]: string;
-  site: string;
-  onset: string;
-  character: string;
-  radiation: string;
-  associatedSymptoms: string;
-  timing: string;
-  exacerbatingFactors: string;
-  relievingFactors: string;
-  severity: string;
-}
-
-export interface AYUSHAssessment {
-  [key: string]: string;
-  prakriti: string;
-  vikriti: string;
-  sara: string;
-  samhanana: string;
-  pramana: string;
-  satmya: string;
-  satva: string;
-  aharaShakti: string;
-  vyayamaShakti: string;
-  vaya: string;
-}
-
-export interface DocumentExtraction {
-  id: string;
-  fileName: string;
-  fileType: string;
-  extractedData: {
-    date?: string;
-    medication?: string;
-    observation?: string;
-    diagnosis?: string;
-    notes?: string;
-  };
-  confidence: {
-    date?: number;
-    medication?: number;
-    observation?: number;
-  };
-  [key: string]: unknown;
-}
-
-export interface TimelineEvent {
-  id: string;
-  date: string;
-  title: string;
-  description: string;
-  type: "consultation" | "medication" | "investigation" | "assessment";
-}
-
-export interface TriageResult {
-  priority: "routine" | "priority" | "urgent";
-  reasons: string[];
-  confidence: number;
-  timestamp?: string;
-}
-
-export interface DoctorVerification {
-  status: "pending" | "confirmed" | "edited" | "rejected";
-  overridePriority?: "routine" | "priority" | "urgent";
-  overrideReason?: string;
-  verifiedAt?: string;
-}
+import { 
+  SOCRATESResponse, 
+  AYUSHAssessment, 
+  DocumentExtraction, 
+  TimelineEvent, 
+  TriageResult, 
+  DoctorVerification,
+  OcrResult,
+  CaseSheetData
+} from "@/types";
 
 export interface PatientState {
   // Patient Info
@@ -88,14 +30,18 @@ export interface PatientState {
   ayush: AYUSHAssessment;
   ayushComplete: boolean;
 
-  // Documents
+  // Documents & OCR
   documents: DocumentExtraction[];
+  ocrResults: OcrResult | null;
 
   // Timeline
   timeline: TimelineEvent[];
 
   // Triage
   triage: TriageResult | null;
+
+  // Case Sheet
+  caseSheet: CaseSheetData | null;
 
   // Doctor
   verification: DoctorVerification;
@@ -105,6 +51,7 @@ export interface PatientState {
   isDoctor: boolean;
   currentStep: string;
   consentGiven: boolean;
+  inputMode: "voice" | "touch" | null;
 
   // Actions
   setPatient: (data: Partial<PatientState>) => void;
@@ -112,10 +59,13 @@ export interface PatientState {
   setSOCRATES: (data: Partial<SOCRATESResponse>) => void;
   setAYUSH: (data: Partial<AYUSHAssessment>) => void;
   addDocument: (doc: DocumentExtraction) => void;
+  setOcrResults: (results: OcrResult) => void;
   setTriage: (triage: TriageResult) => void;
+  setCaseSheet: (data: CaseSheetData) => void;
   setVerification: (verification: DoctorVerification) => void;
   setConsent: (consent: boolean) => void;
   setLanguage: (lang: string) => void;
+  setInputMode: (mode: "voice" | "touch") => void;
   setStep: (step: string) => void;
   reset: () => void;
 }
@@ -166,14 +116,18 @@ export const usePatientStore = create<PatientState>()(
       ayush: defaultAYUSH,
       ayushComplete: false,
 
-      // Documents
+      // Documents & OCR
       documents: [],
+      ocrResults: null,
 
       // Timeline
       timeline: [],
 
       // Triage
       triage: null,
+
+      // Case Sheet
+      caseSheet: null,
 
       // Doctor
       verification: { status: "pending" },
@@ -183,6 +137,7 @@ export const usePatientStore = create<PatientState>()(
       isDoctor: false,
       currentStep: "landing",
       consentGiven: false,
+      inputMode: null,
 
       // Actions
       setPatient: (data) => set((state) => ({ ...state, ...data })),
@@ -193,10 +148,13 @@ export const usePatientStore = create<PatientState>()(
         set((state) => ({ ayush: { ...state.ayush, ...data } as AYUSHAssessment })),
       addDocument: (doc) =>
         set((state) => ({ documents: [...state.documents, doc] })),
+      setOcrResults: (results) => set({ ocrResults: results }),
       setTriage: (triage) => set({ triage }),
+      setCaseSheet: (data) => set({ caseSheet: data }),
       setVerification: (verification) => set({ verification }),
       setConsent: (consent) => set({ consentGiven: consent }),
       setLanguage: (lang) => set({ language: lang }),
+      setInputMode: (mode) => set({ inputMode: mode }),
       setStep: (step) => set({ currentStep: step }),
       reset: () =>
         set({
@@ -213,13 +171,16 @@ export const usePatientStore = create<PatientState>()(
           ayush: defaultAYUSH,
           ayushComplete: false,
           documents: [],
+          ocrResults: null,
           timeline: [],
           triage: null,
+          caseSheet: null,
           verification: { status: "pending" },
           isAuthenticated: false,
           isDoctor: false,
           currentStep: "landing",
           consentGiven: false,
+          inputMode: null,
         }),
     }),
     {
