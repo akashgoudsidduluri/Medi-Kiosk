@@ -2,11 +2,79 @@ import { vlyPlugin } from "@vly-ai/integrations";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 
 // https://vite.dev/config/
-export default defineConfig({
-  plugins: [react(), vlyPlugin(), tailwindcss()],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+
+  return {
+    plugins: [
+      react(),
+      vlyPlugin(),
+      tailwindcss(),
+      {
+        name: "groq-dev-route",
+        configureServer(server) {
+          console.log("GROQ DEV ROUTE REGISTERED");
+          server.middlewares.use(async (req, res, next) => {
+            const url = req.url || "/";
+            if (!url.startsWith("/api/groq")) {
+              return next();
+            }
+            console.log("GROQ DEV ROUTE HIT", req.method, url);
+
+            if (req.method !== "POST") {
+              res.statusCode = 405;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "Method not allowed" }));
+              return;
+            }
+
+            const apiKey = env.GROQ_API_KEY || process.env.GROQ_API_KEY;
+            if (!apiKey) {
+              res.statusCode = 503;
+              res.setHeader("Content-Type", "application/json");
+              res.end(JSON.stringify({ error: "GROQ_API_KEY not configured on server" }));
+              return;
+            }
+
+            let rawBody = "";
+            req.on("data", (chunk) => {
+              rawBody += chunk.toString();
+            });
+
+            req.on("end", async () => {
+              try {
+                const payload = rawBody ? JSON.parse(rawBody) : {};
+                const upstream = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${apiKey}`,
+                  },
+                  body: JSON.stringify({
+                    model: payload.model || env.GROQ_MODEL || "llama-3.1-8b-instant",
+                    messages: payload.messages || [{ role: "user", content: "Return a small JSON object: {\"ok\":true}" }],
+                    max_tokens: 512,
+                    temperature: 0.1,
+                  }),
+                });
+
+                const responseText = await upstream.text();
+                res.statusCode = upstream.status;
+                res.setHeader("Content-Type", "application/json");
+                res.end(responseText);
+              } catch (error) {
+                res.statusCode = 502;
+                res.setHeader("Content-Type", "application/json");
+                res.end(JSON.stringify({ error: "Groq upstream request failed" }));
+              }
+            });
+          });
+        },
+      },
+    ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
@@ -87,14 +155,18 @@ export default defineConfig({
       'framer-motion',
     ],
   },
-  // Performance hints
-  server: {
-    // Bind to all interfaces so WebContainer's server-ready event fires.
-    host: true,
-    port: 5173,
-    // Keep HMR on, but disable full-screen error overlay
-    hmr: {
-      overlay: false,
+    // Performance hints
+    server: {
+      // Bind to all interfaces so WebContainer's server-ready event fires.
+      host: true,
+      port: 5173,
+      // Keep HMR on, but disable full-screen error overlay
+      hmr: {
+        overlay: false,
+      },
     },
-  },
+    define: {
+      __GROQ_MODEL__: JSON.stringify(env.GROQ_MODEL || "llama-3.1-8b-instant"),
+    },
+  };
 });

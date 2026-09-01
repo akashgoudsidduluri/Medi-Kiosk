@@ -1,14 +1,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { 
-  SOCRATESResponse, 
-  AYUSHAssessment, 
-  DocumentExtraction, 
-  TimelineEvent, 
-  TriageResult, 
+import {
+  SOCRATESResponse,
+  AYUSHAssessment,
+  DocumentExtraction,
+  TimelineEvent,
+  TriageResult,
   DoctorVerification,
   OcrResult,
-  CaseSheetData
+  CaseSheetData,
+  ClinicalState,
+  ClinicalFact,
+  defaultClinicalState,
 } from "@/types";
 
 export interface PatientState {
@@ -21,10 +24,13 @@ export interface PatientState {
   abhaId: string;
   mobileNumber: string;
 
-  // Interview
+  // Legacy interview fields (kept for backward compat with existing pages)
   chiefComplaint: string;
   socrates: SOCRATESResponse;
   interviewComplete: boolean;
+
+  // ── NEW: Centralized ClinicalState ──────────────────────────────────────
+  clinicalState: ClinicalState;
 
   // AYUSH
   ayush: AYUSHAssessment;
@@ -46,14 +52,14 @@ export interface PatientState {
   // Doctor
   verification: DoctorVerification;
 
-  // Auth state
+  // Auth / flow state
   isAuthenticated: boolean;
   isDoctor: boolean;
   currentStep: string;
   consentGiven: boolean;
   inputMode: "voice" | "touch" | null;
 
-  // Actions
+  // ── Actions ──────────────────────────────────────────────────────────────
   setPatient: (data: Partial<PatientState>) => void;
   setChiefComplaint: (complaint: string) => void;
   setSOCRATES: (data: Partial<SOCRATESResponse>) => void;
@@ -67,6 +73,15 @@ export interface PatientState {
   setLanguage: (lang: string) => void;
   setInputMode: (mode: "voice" | "touch") => void;
   setStep: (step: string) => void;
+
+  // ── ClinicalState actions ─────────────────────────────────────────────────
+  updateClinicalState: (updates: Partial<ClinicalState>) => void;
+  addDocumentFact: (fact: ClinicalFact) => void;
+  addPatientFact: (fact: ClinicalFact) => void;
+  markFieldUnknown: (field: string) => void;
+  verifyDocumentFact: (field: string, value: string) => void;
+  denyDocumentFact: (field: string, value: string) => void;
+
   reset: () => void;
 }
 
@@ -107,10 +122,13 @@ export const usePatientStore = create<PatientState>()(
       abhaId: "",
       mobileNumber: "",
 
-      // Interview
+      // Legacy interview
       chiefComplaint: "",
       socrates: defaultSOCRATES,
       interviewComplete: false,
+
+      // ClinicalState
+      clinicalState: defaultClinicalState(),
 
       // AYUSH
       ayush: defaultAYUSH,
@@ -139,15 +157,28 @@ export const usePatientStore = create<PatientState>()(
       consentGiven: false,
       inputMode: null,
 
-      // Actions
+      // ── Actions ────────────────────────────────────────────────────────────
       setPatient: (data) => set((state) => ({ ...state, ...data })),
-      setChiefComplaint: (complaint) => set({ chiefComplaint: complaint }),
-      setSOCRATES: (data: Partial<SOCRATESResponse>) =>
-        set((state) => ({ socrates: { ...state.socrates, ...data } as SOCRATESResponse })),
-      setAYUSH: (data: Partial<AYUSHAssessment>) =>
-        set((state) => ({ ayush: { ...state.ayush, ...data } as AYUSHAssessment })),
+
+      setChiefComplaint: (complaint) =>
+        set((state) => ({
+          chiefComplaint: complaint,
+          clinicalState: { ...state.clinicalState, chiefComplaint: complaint },
+        })),
+
+      setSOCRATES: (data) =>
+        set((state) => ({
+          socrates: { ...state.socrates, ...data } as SOCRATESResponse,
+        })),
+
+      setAYUSH: (data) =>
+        set((state) => ({
+          ayush: { ...state.ayush, ...data } as AYUSHAssessment,
+        })),
+
       addDocument: (doc) =>
         set((state) => ({ documents: [...state.documents, doc] })),
+
       setOcrResults: (results) => set({ ocrResults: results }),
       setTriage: (triage) => set({ triage }),
       setCaseSheet: (data) => set({ caseSheet: data }),
@@ -156,6 +187,79 @@ export const usePatientStore = create<PatientState>()(
       setLanguage: (lang) => set({ language: lang }),
       setInputMode: (mode) => set({ inputMode: mode }),
       setStep: (step) => set({ currentStep: step }),
+
+      // ── ClinicalState actions ───────────────────────────────────────────────
+      updateClinicalState: (updates) =>
+        set((state) => ({
+          clinicalState: { ...state.clinicalState, ...updates },
+        })),
+
+      addDocumentFact: (fact) =>
+        set((state) => ({
+          clinicalState: {
+            ...state.clinicalState,
+            documentFacts: [...state.clinicalState.documentFacts, fact],
+          },
+        })),
+
+      addPatientFact: (fact) =>
+        set((state) => ({
+          clinicalState: {
+            ...state.clinicalState,
+            patientFacts: [...state.clinicalState.patientFacts, fact],
+          },
+        })),
+
+      markFieldUnknown: (field) =>
+        set((state) => ({
+          clinicalState: {
+            ...state.clinicalState,
+            unknownFields: state.clinicalState.unknownFields.includes(field)
+              ? state.clinicalState.unknownFields
+              : [...state.clinicalState.unknownFields, field],
+          },
+        })),
+
+      verifyDocumentFact: (field, value) =>
+        set((state) => ({
+          clinicalState: {
+            ...state.clinicalState,
+            documentFacts: state.clinicalState.documentFacts.map((f) =>
+              f.field === field && f.value === value ? { ...f, verified: true } : f
+            ),
+            verifiedFacts: [
+              ...state.clinicalState.verifiedFacts,
+              {
+                field,
+                value,
+                source: "PATIENT" as const,
+                confidence: 1.0,
+                verified: true,
+                timestamp: new Date().toISOString(),
+              },
+            ],
+          },
+        })),
+
+      denyDocumentFact: (field, value) =>
+        set((state) => ({
+          clinicalState: {
+            ...state.clinicalState,
+            // Keep doc fact but add contradiction
+            contradictions: [
+              ...state.clinicalState.contradictions,
+              {
+                field,
+                sourceA: "DOCUMENT" as const,
+                valueA: value,
+                sourceB: "PATIENT" as const,
+                valueB: "Patient denied",
+                message: `Patient denied document-reported information for ${field}`,
+              },
+            ],
+          },
+        })),
+
       reset: () =>
         set({
           id: "",
@@ -168,6 +272,7 @@ export const usePatientStore = create<PatientState>()(
           chiefComplaint: "",
           socrates: defaultSOCRATES,
           interviewComplete: false,
+          clinicalState: defaultClinicalState(),
           ayush: defaultAYUSH,
           ayushComplete: false,
           documents: [],

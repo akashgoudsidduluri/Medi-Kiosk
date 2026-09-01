@@ -1,7 +1,7 @@
 import { AppMode } from "@/types";
 import { AiInterviewService } from "./ai/AiInterviewService";
 import { LocalAiInterviewService } from "./ai/LocalAiInterviewService";
-import { LlmAiInterviewService } from "./ai/LlmAiInterviewService";
+import { GroqAiInterviewService } from "./ai/GroqAiInterviewService";
 import { CaseSheetService } from "./casesheet/CaseSheetService";
 import { LocalCaseSheetService } from "./casesheet/LocalCaseSheetService";
 import { AsrService } from "./asr/AsrService";
@@ -19,48 +19,50 @@ import { FhirService } from "./fhir/FhirService";
 import { LocalFhirService } from "./fhir/LocalFhirService";
 import { AbdmService } from "./abdm/AbdmService";
 import { MockAbdmService } from "./abdm/MockAbdmService";
-// Helper to safely get the app mode, defaulting to 'demo' if not set
+
+// NOTE: VITE_APP_MODE is safe to expose — it is NOT a secret.
+// It only controls which service implementation is used.
 export const getAppMode = (): AppMode => {
-  const mode = import.meta.env.VITE_APP_MODE;
-  if (mode === "hybrid" || mode === "production") {
-    return mode as AppMode;
-  }
+  const mode = (import.meta.env.APP_MODE ?? import.meta.env.VITE_APP_MODE ?? "demo") as string;
+  if (mode === "hybrid" || mode === "production") return mode as AppMode;
   return "demo";
 };
 
 // --- AI Service Resolver ---
+// hybrid/production → GroqAiInterviewService (with local fallback built-in)
+// demo → LocalAiInterviewService (no external calls)
 let aiServiceInstance: AiInterviewService | null = null;
 
 export const getAiService = (): AiInterviewService => {
   if (aiServiceInstance) return aiServiceInstance;
 
   const mode = getAppMode();
-  if (mode === "production") {
-    // Attempt to use LLM if configured, else fallback
-    if (import.meta.env.VITE_LLM_API_KEY) {
-      aiServiceInstance = new LlmAiInterviewService();
-      return aiServiceInstance;
-    }
+  if (mode === "hybrid" || mode === "production") {
+    // GroqAiInterviewService handles its own fallback to Local if Groq is unavailable
+    aiServiceInstance = new GroqAiInterviewService();
+    return aiServiceInstance;
   }
-  
-  // For 'demo' and 'hybrid' (without keys), use local deterministic AI
+
+  // demo — deterministic, no external calls
   aiServiceInstance = new LocalAiInterviewService();
   return aiServiceInstance;
 };
 
-// --- Case Sheet Service Resolver ---
-let caseSheetServiceInstance: CaseSheetService | null = null;
+// Reset singleton (useful for testing / mode switching)
+export const resetAiService = () => {
+  aiServiceInstance = null;
+};
 
+// --- Case Sheet Service ---
+let caseSheetServiceInstance: CaseSheetService | null = null;
 export const getCaseSheetService = (): CaseSheetService => {
   if (caseSheetServiceInstance) return caseSheetServiceInstance;
-  
   caseSheetServiceInstance = new LocalCaseSheetService();
   return caseSheetServiceInstance;
 };
 
-// --- ASR Service Resolver ---
+// --- ASR Service ---
 let asrServiceInstance: AsrService | null = null;
-
 export const getAsrService = (): AsrService => {
   if (asrServiceInstance) return asrServiceInstance;
 
@@ -72,15 +74,13 @@ export const getAsrService = (): AsrService => {
       return asrServiceInstance;
     }
   }
-  
-  // Fallback to mock for demo or unsupported environments
+
   asrServiceInstance = new MockAsrService();
   return asrServiceInstance;
 };
 
-// --- TTS Service Resolver ---
+// --- TTS Service ---
 let ttsServiceInstance: TtsService | null = null;
-
 export const getTtsService = (): TtsService => {
   if (ttsServiceInstance) return ttsServiceInstance;
 
@@ -92,15 +92,13 @@ export const getTtsService = (): TtsService => {
       return ttsServiceInstance;
     }
   }
-  
-  // Fallback to mock
+
   ttsServiceInstance = new MockTtsService();
   return ttsServiceInstance;
 };
 
-// --- OCR Service Resolver ---
+// --- OCR Service ---
 let ocrServiceInstance: OcrService | null = null;
-
 export const getOcrService = (): OcrService => {
   if (ocrServiceInstance) return ocrServiceInstance;
 
@@ -112,33 +110,29 @@ export const getOcrService = (): OcrService => {
       return ocrServiceInstance;
     }
   }
-  
-  // Fallback to mock
+
   ocrServiceInstance = new MockOcrService();
   return ocrServiceInstance;
 };
 
-// --- Triage Service Resolver ---
+// --- Triage Service ---
 let triageServiceInstance: TriageService | null = null;
-
 export const getTriageService = (): TriageService => {
   if (triageServiceInstance) return triageServiceInstance;
   triageServiceInstance = new LocalTriageService();
   return triageServiceInstance;
 };
 
-// --- FHIR Service Resolver ---
+// --- FHIR Service ---
 let fhirServiceInstance: FhirService | null = null;
-
 export const getFhirService = (): FhirService => {
   if (fhirServiceInstance) return fhirServiceInstance;
   fhirServiceInstance = new LocalFhirService();
   return fhirServiceInstance;
 };
 
-// --- ABDM Service Resolver ---
+// --- ABDM Service ---
 let abdmServiceInstance: AbdmService | null = null;
-
 export const getAbdmService = (): AbdmService => {
   if (abdmServiceInstance) return abdmServiceInstance;
   abdmServiceInstance = new MockAbdmService();
