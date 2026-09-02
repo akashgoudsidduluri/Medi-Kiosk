@@ -2,413 +2,442 @@ import { useState } from "react";
 import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
-import { StepProgress } from "@/components/shared/StepProgress";
-import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
-import { languages, demoScenariosMap } from "@/data/demoData";
+import { getAuthService } from "@/services/auth";
 import {
-  User,
-  Globe,
-  FileCheck,
-  ArrowRight,
-  Loader2,
-  ChevronDown,
-  Check,
+  Plus,
+  LogOut,
+  Calendar,
+  FileText,
+  Leaf,
+  Shield,
+  ChevronRight,
   AlertTriangle,
-  Clock,
   CheckCircle,
+  Activity,
+  Loader2,
 } from "lucide-react";
+
+type DashboardView = "overview" | "consultation-detail";
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
-  const store = usePatientStore();
-  const [step, setStep] = useState<"details" | "language" | "consent" | "scenario">("details");
-  const [name, setName] = useState("");
-  const [age, setAge] = useState("");
-  const [gender, setGender] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState("English");
-  const [consentGiven, setConsentGiven] = useState(false);
-  const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const { currentPatient, name, abhaId, clinicalState, ayush, documents, timeline, triage, logoutPatient } = usePatientStore();
+  const authService = getAuthService();
+  const [view, setView] = useState<DashboardView>("overview");
+  const [selectedConsultation, setSelectedConsultation] = useState<string | null>(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const handleDetailsSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !age || !gender) return;
-    store.setPatient({ name, age: parseInt(age), gender });
-    setStep("language");
+  const handleLogout = async () => {
+    setIsLoggingOut(true);
+    await authService.logout();
+    logoutPatient();
+    setTimeout(() => navigate("/patient/login"), 600);
   };
 
-  const handleLanguageSubmit = () => {
-    store.setLanguage(selectedLanguage);
-    setStep("consent");
+  const handleStartAssessment = () => {
+    navigate("/patient/consent");
   };
 
-  const handleConsentSubmit = () => {
-    if (!consentGiven) return;
-    store.setConsent(true);
-    setStep("scenario");
-  };
+  // Demo previous consultations
+  const previousConsultations = [
+    {
+      id: "cons-001",
+      date: "15 Aug 2026",
+      chiefComplaint: "Mild joint pain in knee",
+      priority: "routine" as const,
+      status: "Completed",
+      casesheetAvailable: true,
+    },
+    {
+      id: "cons-002",
+      date: "08 Aug 2026",
+      chiefComplaint: "Abdominal discomfort",
+      priority: "priority" as const,
+      status: "Completed",
+      casesheetAvailable: true,
+    },
+  ];
 
-  const handleScenarioSelect = async (scenarioKey: string) => {
-    setSelectedScenario(scenarioKey);
-    setIsLoading(true);
+  // ════════════════════════════════════════════════════════════════
+  // CONSULTATION DETAIL VIEW
+  // ════════════════════════════════════════════════════════════════
 
-    const scenario = demoScenariosMap[scenarioKey];
-    store.setPatient({
-      name: scenario.patient.name,
-      age: scenario.patient.age,
-      gender: scenario.patient.gender,
-      language: scenario.patient.language,
-      mobileNumber: scenario.patient.mobileNumber,
-      abhaId: scenario.patient.abhaId,
-      chiefComplaint: scenario.history.chiefComplaint,
-      socrates: { ...scenario.history, site: scenario.history.site, onset: scenario.history.onset, character: scenario.history.character, radiation: scenario.history.radiation, associatedSymptoms: scenario.history.associatedSymptoms, timing: scenario.history.timing, exacerbatingFactors: scenario.history.exacerbatingFactors, relievingFactors: scenario.history.relievingFactors, severity: scenario.history.severity },
-      ayush: scenario.ayush as any,
-      documents: scenario.documents as any,
-      timeline: scenario.timeline as any,
-      triage: scenario.triage as any,
-      interviewComplete: true,
-      ayushComplete: true,
-    });
+  if (view === "consultation-detail" && selectedConsultation) {
+    const consultation = previousConsultations.find((c) => c.id === selectedConsultation);
+    if (!consultation) return null;
 
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsLoading(false);
-    navigate("/patient/interview");
-  };
+    return (
+      <div className="min-h-screen vintage-texture">
+        <Header />
+        <div className="max-w-3xl mx-auto px-4 py-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3 }}
+          >
+            <Card className="vintage-card mb-6">
+              <CardHeader className="flex flex-row items-start justify-between">
+                <div>
+                  <CardTitle style={{ fontFamily: "Georgia, serif" }}>
+                    Consultation Details
+                  </CardTitle>
+                  <CardDescription>{consultation.date}</CardDescription>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setView("overview");
+                    setSelectedConsultation(null);
+                  }}
+                >
+                  ← Back to Dashboard
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-parchment">
+                    <p className="text-xs text-muted-foreground mb-1">Chief Complaint</p>
+                    <p className="text-sm font-semibold text-foreground">{consultation.chiefComplaint}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-parchment">
+                    <p className="text-xs text-muted-foreground mb-1">Priority Level</p>
+                    <div className="flex items-center gap-2">
+                      <div
+                        className={`w-2 h-2 rounded-full ${
+                          consultation.priority === "routine"
+                            ? "bg-green-500"
+                            : consultation.priority === "priority"
+                              ? "bg-amber-500"
+                              : "bg-red-500"
+                        }`}
+                      />
+                      <p className="text-sm font-semibold text-foreground capitalize">
+                        {consultation.priority}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-lg bg-green-50 border border-green-200 dark:bg-green-950/20 dark:border-green-900/40">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle className="w-4 h-4 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-green-700 dark:text-green-300">Consultation Status</p>
+                      <p className="text-[10px] text-green-700 dark:text-green-300 mt-0.5">
+                        {consultation.status}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {consultation.casesheetAvailable && (
+                  <div className="p-3 rounded-lg bg-blue-50 border border-blue-200 dark:bg-blue-950/20 dark:border-blue-900/40">
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">Case Sheet Available</p>
+                        <p className="text-[10px] text-blue-700 dark:text-blue-300 mt-0.5">
+                          A structured case sheet from this consultation is available.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-4 border-t border-border">
+                  <Button
+                    className="w-full bg-vintage-blue hover:bg-vintage-blue/90"
+                    onClick={() => {
+                      setView("overview");
+                      setSelectedConsultation(null);
+                    }}
+                  >
+                    Back to Dashboard
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // MAIN DASHBOARD VIEW
+  // ════════════════════════════════════════════════════════════════
 
   return (
     <div className="min-h-screen vintage-texture">
       <Header />
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        {/* Progress */}
-        <div className="mb-8">
-          <StepProgress
-            currentStep={
-              step === "details"
-                ? "login"
-                : step === "language"
-                  ? "consent"
-                  : step === "consent"
-                    ? "consent"
-                    : "interview"
-            }
-            completedSteps={["login"]}
-          />
-        </div>
-
+      <div className="max-w-4xl mx-auto px-4 py-8">
         <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
         >
-          {/* Step: Patient Details */}
-          {step === "details" && (
+          {/* HEADER WITH PATIENT INFO & PRIMARY CTA */}
+          <div className="mb-8">
             <Card className="vintage-card">
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-lg bg-vintage-blue/10 flex items-center justify-center">
-                    <User className="w-5 h-5 text-vintage-blue" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg" style={{ fontFamily: "Georgia, serif" }}>
-                      Patient Details
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">Basic information for this session</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleDetailsSubmit} className="space-y-4">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-1.5 block">Full Name</label>
-                    <Input
-                      placeholder="Enter patient name"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      className="h-11"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium text-foreground mb-1.5 block">Age</label>
-                      <Input
-                        type="number"
-                        placeholder="Age"
-                        value={age}
-                        onChange={(e) => setAge(e.target.value)}
-                        className="h-11"
-                        min={1}
-                        max={120}
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-foreground mb-1.5 block">Gender</label>
-                      <div className="flex gap-2">
-                        {["Male", "Female", "Other"].map((g) => (
-                          <Button
-                            key={g}
-                            type="button"
-                            variant={gender === g ? "default" : "outline"}
-                            className={`flex-1 h-11 text-sm ${
-                              gender === g ? "bg-vintage-blue text-white" : ""
-                            }`}
-                            onClick={() => setGender(g)}
-                          >
-                            {g}
-                          </Button>
-                        ))}
+              <CardContent className="pt-6">
+                <div className="flex items-start justify-between gap-6">
+                  <div className="flex-1">
+                    <h1 className="text-3xl font-bold text-foreground mb-1" style={{ fontFamily: "Georgia, serif" }}>
+                      Welcome, {name || "Patient"}
+                    </h1>
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Activity className="w-4 h-4" />
+                        <span>MediKiosk ID: <span className="font-mono font-semibold text-foreground">{currentPatient?.patientId || "—"}</span></span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Shield className="w-4 h-4" />
+                        <span>
+                          ABHA Status:{" "}
+                          <span className="font-semibold text-foreground">
+                            {abhaId ? "Linked" : "Not linked"}
+                          </span>
+                          {abhaId && ` (${abhaId.substring(0, 8)}...)`}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="w-4 h-4" />
+                        <span>
+                          Authentication:{" "}
+                          <span className="font-semibold text-green-600 dark:text-green-400">Verified (Demo)</span>
+                        </span>
                       </div>
                     </div>
                   </div>
-                  <DisclaimerBanner type="demo" />
-                  <Button
-                    type="submit"
-                    className="w-full h-12 text-base bg-vintage-blue hover:bg-vintage-blue/90"
-                    disabled={!name || !age || !gender}
-                  >
-                    Continue
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          )}
 
-          {/* Step: Language Selection */}
-          {step === "language" && (
-            <Card className="vintage-card">
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-lg bg-vintage-teal/10 flex items-center justify-center">
-                    <Globe className="w-5 h-5 text-vintage-teal" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg" style={{ fontFamily: "Georgia, serif" }}>
-                      Language Selection
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">Choose your preferred language for interaction</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                  {languages.map((lang) => (
+                  <div className="flex flex-col gap-2">
                     <Button
-                      key={lang.code}
-                      variant={selectedLanguage === lang.name ? "default" : "outline"}
-                      className={`h-auto py-3 flex-col gap-1 ${
-                        selectedLanguage === lang.name
-                          ? "bg-vintage-teal text-white border-vintage-teal"
-                          : ""
-                      }`}
-                      onClick={() => setSelectedLanguage(lang.name)}
+                      onClick={handleStartAssessment}
+                      className="h-12 px-6 bg-vintage-blue hover:bg-vintage-blue/90 text-white"
                     >
-                      <span className="text-sm font-medium">{lang.native}</span>
-                      <span className="text-[10px] opacity-70">{lang.name}</span>
+                      <Plus className="w-5 h-5 mr-2" />
+                      Start New Assessment
                     </Button>
-                  ))}
-                </div>
-                <div className="mt-4 p-3 rounded-lg bg-vintage-gold/5 border border-vintage-gold/20">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-semibold text-vintage-gold">Bhashini ASR — Simulated</span>
-                    {" "}Speech recognition powered by Bhashini/AI4Bharat (demo mode)
-                  </p>
-                </div>
-                <Button
-                  className="w-full h-12 text-base mt-6 bg-vintage-blue hover:bg-vintage-blue/90"
-                  onClick={handleLanguageSubmit}
-                >
-                  Continue with {selectedLanguage}
-                  <ArrowRight className="ml-2 w-5 h-5" />
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step: Consent */}
-          {step === "consent" && (
-            <Card className="vintage-card">
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-lg bg-vintage-gold/10 flex items-center justify-center">
-                    <FileCheck className="w-5 h-5 text-vintage-gold" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg" style={{ fontFamily: "Georgia, serif" }}>
-                      Consent & Privacy
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">Please review and accept before proceeding</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="p-4 rounded-lg bg-parchment border border-border space-y-3">
-                  <p className="text-sm text-foreground leading-relaxed">
-                    By proceeding, you consent to:
-                  </p>
-                  <ul className="space-y-2 text-sm text-muted-foreground">
-                    <li className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-vintage-green mt-0.5 flex-shrink-0" />
-                      <span>Collection of your health information for pre-consultation assessment</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-vintage-green mt-0.5 flex-shrink-0" />
-                      <span>Voice recording for speech-to-text processing (not retained after session)</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-vintage-green mt-0.5 flex-shrink-0" />
-                      <span>AI-assisted analysis to prepare a clinical summary for your doctor</span>
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <Check className="w-4 h-4 text-vintage-green mt-0.5 flex-shrink-0" />
-                      <span>Sharing the structured case sheet with your consulting physician</span>
-                    </li>
-                  </ul>
-                  <div className="pt-2 border-t border-border">
-                    <p className="text-xs text-muted-foreground italic">
-                      Your voice is used only for this assessment. This prototype does not retain raw voice recordings.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted">
-                  <input
-                    type="checkbox"
-                    id="consent"
-                    checked={consentGiven}
-                    onChange={(e) => setConsentGiven(e.target.checked)}
-                    className="w-4 h-4 rounded border-border"
-                  />
-                  <label htmlFor="consent" className="text-sm text-foreground cursor-pointer">
-                    I have read and understood the above. I consent to proceed.
-                  </label>
-                </div>
-
-                <DisclaimerBanner type="warning" />
-
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    className="flex-1 h-12"
-                    onClick={() => setStep("language")}
-                  >
-                    Back
-                  </Button>
-                  <Button
-                    className="flex-1 h-12 text-base bg-vintage-blue hover:bg-vintage-blue/90"
-                    disabled={!consentGiven}
-                    onClick={handleConsentSubmit}
-                  >
-                    I Agree
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Step: Demo Scenario */}
-          {step === "scenario" && (
-            <Card className="vintage-card">
-              <CardHeader>
-                <div className="flex items-center gap-3 mb-2">
-                  <div className="w-10 h-10 rounded-lg bg-vintage-blue/10 flex items-center justify-center">
-                    <AlertTriangle className="w-5 h-5 text-vintage-blue" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg" style={{ fontFamily: "Georgia, serif" }}>
-                      Select Demo Scenario
-                    </CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      Choose a pre-configured scenario for the demonstration
-                    </p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {[
-                  {
-                    key: "routine",
-                    label: "Routine",
-                    description: "Mild joint pain — No red flags detected",
-                    icon: CheckCircle,
-                    color: "routine-green",
-                    borderColor: "border-routine-green/30",
-                    bgColor: "bg-routine-green/5",
-                  },
-                  {
-                    key: "priority",
-                    label: "Priority",
-                    description: "Abdominal discomfort — Worsening symptoms, requires evaluation",
-                    icon: Clock,
-                    color: "priority-amber",
-                    borderColor: "border-priority-amber/30",
-                    bgColor: "bg-priority-amber/5",
-                  },
-                  {
-                    key: "urgent",
-                    label: "Urgent",
-                    description: "Chest pain with breathlessness — Potential red-flag indicators",
-                    icon: AlertTriangle,
-                    color: "urgent-red",
-                    borderColor: "border-urgent-red/30",
-                    bgColor: "bg-urgent-red/5",
-                  },
-                ].map((scenario) => (
-                  <button
-                    key={scenario.key}
-                    className={`w-full p-4 rounded-xl border-2 text-left transition-all hover:shadow-md ${
-                      selectedScenario === scenario.key
-                        ? `${scenario.borderColor} ${scenario.bgColor}`
-                        : "border-border hover:border-border/80 bg-white"
-                    }`}
-                    onClick={() => handleScenarioSelect(scenario.key)}
-                    disabled={isLoading}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        scenario.key === "routine"
-                          ? "bg-routine-green/10 text-routine-green"
-                          : scenario.key === "priority"
-                            ? "bg-priority-amber/10 text-priority-amber"
-                            : "bg-urgent-red/10 text-urgent-red"
-                      }`}>
-                        <scenario.icon className="w-5 h-5" />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`font-bold text-sm ${
-                          scenario.key === "routine"
-                            ? "text-routine-green"
-                            : scenario.key === "priority"
-                              ? "text-priority-amber"
-                              : "text-urgent-red"
-                        }`}>
-                          {scenario.label}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {scenario.description}
-                        </p>
-                      </div>
-                      {isLoading && selectedScenario === scenario.key ? (
-                        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                    <Button
+                      onClick={handleLogout}
+                      variant="outline"
+                      className="h-12 px-6"
+                      disabled={isLoggingOut}
+                    >
+                      {isLoggingOut ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
                       ) : (
-                        <ArrowRight className="w-4 h-4 text-muted-foreground" />
+                        <>
+                          <LogOut className="w-4 h-4 mr-2" />
+                          Logout
+                        </>
                       )}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* PREVIOUS CONSULTATIONS */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+              <Calendar className="w-5 h-5 inline mr-2" />
+              Previous Consultations
+            </h2>
+            {previousConsultations.length > 0 ? (
+              <div className="space-y-3">
+                {previousConsultations.map((consultation) => (
+                  <button
+                    key={consultation.id}
+                    onClick={() => {
+                      setSelectedConsultation(consultation.id);
+                      setView("consultation-detail");
+                    }}
+                    className="w-full p-4 rounded-lg border-2 border-border hover:border-vintage-blue hover:bg-vintage-blue/5 transition-all text-left group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <span className="text-sm font-semibold text-foreground">{consultation.chiefComplaint}</span>
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              consultation.priority === "routine"
+                                ? "bg-green-500"
+                                : consultation.priority === "priority"
+                                  ? "bg-amber-500"
+                                  : "bg-red-500"
+                            }`}
+                          />
+                        </div>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                          <span>{consultation.date}</span>
+                          <span className="capitalize">{consultation.priority}</span>
+                          <span>{consultation.status}</span>
+                        </div>
+                      </div>
+                      <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-vintage-blue" />
                     </div>
                   </button>
                 ))}
+              </div>
+            ) : (
+              <Card className="vintage-card">
+                <CardContent className="pt-6">
+                  <p className="text-sm text-muted-foreground text-center">
+                    No previous consultations found.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+          </div>
 
-                <DisclaimerBanner
-                  type="simulated"
-                  message="Demo scenarios populate pre-configured patient data for demonstration purposes."
-                />
+          {/* CLINICAL HISTORY */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+              <FileText className="w-5 h-5 inline mr-2" />
+              Clinical History
+            </h2>
+            <Card className="vintage-card">
+              <CardContent className="pt-6 space-y-3">
+                {clinicalState?.chiefComplaint ? (
+                  <>
+                    <div className="p-3 rounded-lg bg-parchment">
+                      <p className="text-xs text-muted-foreground mb-1">Chief Complaint</p>
+                      <p className="text-sm font-semibold text-foreground">{clinicalState.chiefComplaint}</p>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center">No clinical history available.</p>
+                )}
               </CardContent>
             </Card>
+          </div>
+
+          {/* AYUSH PROFILE */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+              <Leaf className="w-5 h-5 inline mr-2" />
+              AYUSH Profile
+            </h2>
+            <Card className="vintage-card">
+              <CardContent className="pt-6">
+                {ayush && (ayush.prakriti || ayush.vikriti) ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    {ayush.prakriti && (
+                      <div className="p-3 rounded-lg bg-parchment">
+                        <p className="text-xs text-muted-foreground mb-1">Prakriti</p>
+                        <p className="text-sm font-semibold text-foreground">{ayush.prakriti}</p>
+                      </div>
+                    )}
+                    {ayush.vikriti && (
+                      <div className="p-3 rounded-lg bg-parchment">
+                        <p className="text-xs text-muted-foreground mb-1">Vikriti</p>
+                        <p className="text-sm font-semibold text-foreground">{ayush.vikriti}</p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center">
+                    AYUSH assessment not completed.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* DOCUMENTS */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+              <FileText className="w-5 h-5 inline mr-2" />
+              Documents
+            </h2>
+            <Card className="vintage-card">
+              <CardContent className="pt-6">
+                {documents && documents.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">
+                      <span className="font-semibold text-foreground">{documents.length}</span> document{documents.length > 1 ? "s" : ""} on file
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center">
+                    No documents uploaded.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* TIMELINE */}
+          <div className="mb-8">
+            <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+              <Calendar className="w-5 h-5 inline mr-2" />
+              Clinical Timeline
+            </h2>
+            <Card className="vintage-card">
+              <CardContent className="pt-6">
+                {timeline && timeline.length > 0 ? (
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {timeline.map((event: any, i: number) => (
+                      <div key={i} className="flex gap-3 pb-3 border-b border-border last:border-0">
+                        <div className="w-2 h-2 rounded-full bg-vintage-blue mt-1.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{event.date}</p>
+                          <p className="text-sm font-semibold text-foreground">{event.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{event.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center">
+                    No timeline events available.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* TRIAGE */}
+          {triage && (
+            <div className="mb-8">
+              <h2 className="text-xl font-bold text-foreground mb-4" style={{ fontFamily: "Georgia, serif" }}>
+                <AlertTriangle className="w-5 h-5 inline mr-2" />
+                Triage Result
+              </h2>
+              <Card className={`vintage-card border-l-4 ${
+                triage.priority === "urgent"
+                  ? "border-l-red-500"
+                  : triage.priority === "priority"
+                    ? "border-l-amber-500"
+                    : "border-l-green-500"
+              }`}>
+                <CardContent className="pt-6">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className={`w-3 h-3 rounded-full ${
+                      triage.priority === "urgent"
+                        ? "bg-red-500"
+                        : triage.priority === "priority"
+                          ? "bg-amber-500"
+                          : "bg-green-500"
+                    }`} />
+                    <p className="text-sm font-semibold text-foreground capitalize">{triage.priority}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
+
+          {/* FOOTER INFO */}
+          <div className="text-center text-xs text-muted-foreground py-4">
+            <p>MediKiosk Patient Portal — Demo Mode</p>
+            <p>All data is session-only and not persisted.</p>
+          </div>
         </motion.div>
       </div>
     </div>

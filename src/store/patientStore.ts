@@ -3,6 +3,7 @@ import { persist } from "zustand/middleware";
 import {
   SOCRATESResponse,
   AYUSHAssessment,
+  AharaVihara,
   DocumentExtraction,
   TimelineEvent,
   TriageResult,
@@ -11,6 +12,10 @@ import {
   CaseSheetData,
   ClinicalState,
   ClinicalFact,
+  PatientIdentity,
+  AuthProvider,
+  VerificationStatus,
+  defaultAharaVihara,
   defaultClinicalState,
 } from "@/types";
 
@@ -34,6 +39,7 @@ export interface PatientState {
 
   // AYUSH
   ayush: AYUSHAssessment;
+  aharaVihara: AharaVihara;
   ayushComplete: boolean;
 
   // Documents & OCR
@@ -54,6 +60,9 @@ export interface PatientState {
 
   // Auth / flow state
   isAuthenticated: boolean;
+  authenticationProvider: AuthProvider;
+  verificationStatus: VerificationStatus;
+  currentPatient: PatientIdentity | null;
   isDoctor: boolean;
   currentStep: string;
   consentGiven: boolean;
@@ -64,6 +73,7 @@ export interface PatientState {
   setChiefComplaint: (complaint: string) => void;
   setSOCRATES: (data: Partial<SOCRATESResponse>) => void;
   setAYUSH: (data: Partial<AYUSHAssessment>) => void;
+  setAharaVihara: (data: Partial<AharaVihara>) => void;
   addDocument: (doc: DocumentExtraction) => void;
   setOcrResults: (results: OcrResult) => void;
   setTriage: (triage: TriageResult) => void;
@@ -73,6 +83,7 @@ export interface PatientState {
   setLanguage: (lang: string) => void;
   setInputMode: (mode: "voice" | "touch") => void;
   setStep: (step: string) => void;
+  setInterviewComplete: (complete: boolean) => void;
 
   // ── ClinicalState actions ─────────────────────────────────────────────────
   updateClinicalState: (updates: Partial<ClinicalState>) => void;
@@ -132,6 +143,7 @@ export const usePatientStore = create<PatientState>()(
 
       // AYUSH
       ayush: defaultAYUSH,
+      aharaVihara: defaultAharaVihara(),
       ayushComplete: false,
 
       // Documents & OCR
@@ -152,6 +164,9 @@ export const usePatientStore = create<PatientState>()(
 
       // Auth
       isAuthenticated: false,
+      authenticationProvider: "demo",
+      verificationStatus: "pending",
+      currentPatient: null,
       isDoctor: false,
       currentStep: "landing",
       consentGiven: false,
@@ -172,12 +187,39 @@ export const usePatientStore = create<PatientState>()(
         })),
 
       setAYUSH: (data) =>
-        set((state) => ({
-          ayush: { ...state.ayush, ...data } as AYUSHAssessment,
-        })),
+        set((state) => {
+          const nextAyush = { ...state.ayush, ...data } as AYUSHAssessment;
+          const nextClinicalState = {
+            ...state.clinicalState,
+            ayush: nextAyush,
+            ayushComplete: Object.values(nextAyush).every((value) => Boolean(value && String(value).trim())),
+          };
+          return {
+            ayush: nextAyush,
+            ayushComplete: nextClinicalState.ayushComplete,
+            clinicalState: nextClinicalState,
+          };
+        }),
+
+      setAharaVihara: (data) =>
+        set((state) => {
+          const nextAhara = { ...state.aharaVihara, ...data } as AharaVihara;
+          const nextClinicalState = {
+            ...state.clinicalState,
+            aharaVihara: nextAhara,
+          };
+          return {
+            aharaVihara: nextAhara,
+            clinicalState: nextClinicalState,
+          };
+        }),
 
       addDocument: (doc) =>
-        set((state) => ({ documents: [...state.documents, doc] })),
+        set((state) => {
+          const exists = state.documents.some((item) => item.id === doc.id || item.fileName === doc.fileName);
+          if (exists) return state;
+          return { documents: [...state.documents, doc] };
+        }),
 
       setOcrResults: (results) => set({ ocrResults: results }),
       setTriage: (triage) => set({ triage }),
@@ -187,6 +229,7 @@ export const usePatientStore = create<PatientState>()(
       setLanguage: (lang) => set({ language: lang }),
       setInputMode: (mode) => set({ inputMode: mode }),
       setStep: (step) => set({ currentStep: step }),
+      setInterviewComplete: (complete) => set({ interviewComplete: complete }),
 
       // ── ClinicalState actions ───────────────────────────────────────────────
       updateClinicalState: (updates) =>
@@ -274,6 +317,7 @@ export const usePatientStore = create<PatientState>()(
           interviewComplete: false,
           clinicalState: defaultClinicalState(),
           ayush: defaultAYUSH,
+          aharaVihara: defaultAharaVihara(),
           ayushComplete: false,
           documents: [],
           ocrResults: null,
@@ -282,6 +326,9 @@ export const usePatientStore = create<PatientState>()(
           caseSheet: null,
           verification: { status: "pending" },
           isAuthenticated: false,
+          authenticationProvider: "demo",
+          verificationStatus: "pending",
+          currentPatient: null,
           isDoctor: false,
           currentStep: "landing",
           consentGiven: false,

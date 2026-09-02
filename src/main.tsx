@@ -5,7 +5,8 @@ import { VlyToolbar } from "../vly-toolbar-readonly.tsx";
 import { MockAuthProvider } from "@/components/MockAuthProvider";
 import React, { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes, useLocation } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
+import { usePatientStore } from "@/store/patientStore";
 import "./index.css";
 
 // Lazy load route components
@@ -106,6 +107,26 @@ class RootErrorBoundary extends React.Component<
 
 // TODO: Replace MockAuthProvider with a real auth provider (Convex, Supabase, etc.) in production
 
+function PatientAuthGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = usePatientStore();
+
+  if (!isAuthenticated) {
+    return <Navigate to="/patient/login" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function PatientGuestGate({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated } = usePatientStore();
+
+  if (isAuthenticated) {
+    return <Navigate to="/patient/dashboard" replace />;
+  }
+
+  return <>{children}</>;
+}
+
 function RouteSyncer() {
   const location = useLocation();
   useEffect(() => {
@@ -148,17 +169,17 @@ createRoot(document.getElementById("root")!).render(
               <Route path="/integration" element={<Integration />} />
 
               {/* Patient routes */}
-              <Route path="/patient/login" element={<PatientLogin />} />
-              <Route path="/patient/consent" element={<Consent />} />
-              <Route path="/patient/language" element={<Language />} />
-              <Route path="/patient/input-mode" element={<InputMode />} />
-              <Route path="/patient/dashboard" element={<PatientDashboard />} />
-              <Route path="/patient/interview" element={<Interview />} />
-              <Route path="/patient/assessment" element={<Assessment />} />
-              <Route path="/patient/document" element={<DocumentUpload />} />
-              <Route path="/patient/timeline" element={<Timeline />} />
-              <Route path="/patient/triage" element={<Triage />} />
-              <Route path="/patient/casesheet" element={<CaseSheet />} />
+              <Route path="/patient/login" element={<PatientGuestGate><PatientLogin /></PatientGuestGate>} />
+              <Route path="/patient/dashboard" element={<PatientAuthGate><PatientDashboard /></PatientAuthGate>} />
+              <Route path="/patient/consent" element={<PatientAuthGate><Consent /></PatientAuthGate>} />
+              <Route path="/patient/language" element={<PatientAuthGate><Language /></PatientAuthGate>} />
+              <Route path="/patient/input-mode" element={<PatientAuthGate><InputMode /></PatientAuthGate>} />
+              <Route path="/patient/interview" element={<PatientAuthGate><Interview /></PatientAuthGate>} />
+              <Route path="/patient/assessment" element={<PatientAuthGate><Assessment /></PatientAuthGate>} />
+              <Route path="/patient/document" element={<PatientAuthGate><DocumentUpload /></PatientAuthGate>} />
+              <Route path="/patient/timeline" element={<PatientAuthGate><Timeline /></PatientAuthGate>} />
+              <Route path="/patient/triage" element={<PatientAuthGate><Triage /></PatientAuthGate>} />
+              <Route path="/patient/casesheet" element={<PatientAuthGate><CaseSheet /></PatientAuthGate>} />
 
               {/* Doctor routes */}
               <Route path="/doctor/login" element={<DoctorLogin />} />

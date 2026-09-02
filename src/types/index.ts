@@ -3,13 +3,35 @@ export type AppMode = "demo" | "hybrid" | "production";
 // ============================================================
 // PATIENT
 // ============================================================
+export type AuthProvider = "aadhaar" | "abha" | "mobile" | "demo";
+export type VerificationStatus = "pending" | "verified" | "rejected" | "demo";
+
+export interface PatientIdentity {
+  patientId: string;
+  abhaId?: string;
+  displayName: string;
+  dateOfBirth?: string;
+  gender?: string;
+  identityProvider: AuthProvider;
+  verificationStatus: VerificationStatus;
+  isGuardian: boolean;
+  linkedPatientIds: string[];
+  createdAt: string;
+}
+
 export interface Patient {
   id: string;
+  patientId?: string;
   name: string;
   age?: number;
   gender?: string;
   abhaId?: string;
   mobileNumber?: string;
+  displayName?: string;
+  identityProvider?: AuthProvider;
+  verificationStatus?: VerificationStatus;
+  isGuardian?: boolean;
+  linkedPatientIds?: string[];
 }
 
 // ============================================================
@@ -24,6 +46,7 @@ export interface ClinicalFact {
   confidence: number; // 0–1
   verified: boolean;
   timestamp?: string;
+  documentId?: string;
 }
 
 export interface ClinicalContradiction {
@@ -63,6 +86,13 @@ export interface ClinicalState {
   // Review of systems (keyed by system name)
   reviewOfSystems: Record<string, string>;
 
+  // AYUSH — Dashavidha + Ahara-Vihara (application-controlled, not Groq-invented)
+  ayush: AyushAssessment;
+  aharaVihara: AharaVihara;
+  ayushUnknownFields: string[];
+  ayushComplete: boolean;
+  ayushPhysicianVerified: boolean;
+
   // Provenance layers
   patientFacts: ClinicalFact[];
   documentFacts: ClinicalFact[];
@@ -75,12 +105,38 @@ export interface ClinicalState {
   completeness: number; // 0–1
 }
 
+export const defaultAharaVihara = (): AharaVihara => ({
+  diet: "",
+  sleep: "",
+  bowelHabits: "",
+  dailyRoutine: "",
+  substances: "",
+});
+
+export const defaultAyushAssessment = (): AyushAssessment => ({
+  prakriti: "",
+  vikriti: "",
+  sara: "",
+  samhanana: "",
+  pramana: "",
+  satmya: "",
+  satva: "",
+  aharaShakti: "",
+  vyayamaShakti: "",
+  vaya: "",
+});
+
 export const defaultClinicalState = (): ClinicalState => ({
   associatedSymptoms: [],
   pastMedicalHistory: [],
   medications: [],
   allergies: [],
   reviewOfSystems: {},
+  ayush: defaultAyushAssessment(),
+  aharaVihara: defaultAharaVihara(),
+  ayushUnknownFields: [],
+  ayushComplete: false,
+  ayushPhysicianVerified: false,
   patientFacts: [],
   documentFacts: [],
   verifiedFacts: [],
@@ -129,6 +185,15 @@ export interface ClinicalHistory {
 // ============================================================
 // AYUSH
 // ============================================================
+export interface AharaVihara {
+  diet?: string;
+  sleep?: string;
+  bowelHabits?: string;
+  dailyRoutine?: string;
+  substances?: string;
+  [key: string]: string | undefined;
+}
+
 export interface AyushAssessment {
   prakriti?: string;
   vikriti?: string;
@@ -188,10 +253,12 @@ export interface DocumentExtraction {
   fileName?: string;
   type?: string;
   fileType?: string;
+  status?: "pending" | "processing" | "completed" | "failed";
   extractedData: Record<string, string>;
   confidence?: Record<string, number>;
   rawText?: string;
   timestamp?: string;
+  error?: string;
   documentFacts?: ClinicalFact[]; // NEW: structured facts from this doc
   [key: string]: unknown;
 }
@@ -199,7 +266,7 @@ export interface DocumentExtraction {
 export interface OcrResult {
   text: string;
   confidence: number;
-  entities: Record<string, unknown>;
+  entities?: Record<string, unknown>;
 }
 
 // ============================================================
@@ -224,6 +291,7 @@ export interface InterviewQuestion {
   targetField: string; // loosened from keyof ClinicalHistory
   options?: string[];
   hint?: string;      // e.g. "from your uploaded document"
+  fieldLabel?: string;
 }
 
 export interface CaseSummary {
@@ -249,6 +317,8 @@ export interface GroqExtractedFields {
   pastMedicalHistory: string[];
   medications: string[];
   allergies: string[];
+  familyHistory: string | null;
+  personalHistory: string | null;
 }
 
 export interface GroqNextQuestionSuggestion {

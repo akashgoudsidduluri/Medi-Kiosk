@@ -89,7 +89,7 @@ export function Header() {
               className="text-sm bg-vintage-blue hover:bg-vintage-blue/90 text-white"
               onClick={() => navigate("/patient/login")}
             >
-              Start Assessment
+              Patient Login / Signup
             </Button>
           </div>
 
@@ -166,7 +166,7 @@ export function Header() {
                   navigate("/patient/login");
                 }}
               >
-                Start Assessment
+                Patient Login / Signup
               </Button>
             </div>
           </div>

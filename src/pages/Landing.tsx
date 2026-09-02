@@ -96,7 +96,7 @@ export default function Landing() {
                 className="text-base px-8 py-6 bg-vintage-blue hover:bg-vintage-blue/90 text-white rounded-xl shadow-lg shadow-vintage-blue/20"
                 onClick={() => navigate("/patient/login")}
               >
-                Start Patient Assessment
+                Patient Login / Signup
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
