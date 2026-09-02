@@ -102,15 +102,15 @@ let ocrServiceInstance: OcrService | null = null;
 export const getOcrService = (): OcrService => {
   if (ocrServiceInstance) return ocrServiceInstance;
 
-  const mode = getAppMode();
-  if (mode === "hybrid" || mode === "production") {
-    const tesseractOcr = new TesseractOcrService();
-    if (tesseractOcr.isSupported()) {
-      ocrServiceInstance = tesseractOcr;
-      return ocrServiceInstance;
-    }
+  // Try Tesseract in ALL modes (demo, hybrid, production)
+  // This ensures real files are actually OCR-processed, not replaced with demo data
+  const tesseractOcr = new TesseractOcrService();
+  if (tesseractOcr.isSupported()) {
+    ocrServiceInstance = tesseractOcr;
+    return ocrServiceInstance;
   }
 
+  // Only use MockOcrService as a true fallback (e.g., if browser doesn't support WebAssembly)
   ocrServiceInstance = new MockOcrService();
   return ocrServiceInstance;
 };
