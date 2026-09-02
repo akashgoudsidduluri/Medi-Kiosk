@@ -9,6 +9,8 @@ import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
 import { getAsrService, getTtsService, getAiService } from "@/services/serviceRegistry";
+import { ClinicalState, defaultClinicalState, SOCRATESResponse } from "@/types";
+import { interviewGreeting, placeholderText, clarificationMessage, getFieldLabel, fieldDescription } from "@/services/ai/interviewI18n";
 import {
   Mic,
   MicOff,
@@ -56,16 +58,56 @@ interface ChatMessage {
   timestamp: string;
 }
 
+const toClinicalState = (complaint: string, legacy: Partial<SOCRATESResponse> = {}): ClinicalState => {
+  const base = defaultClinicalState();
+  const severityValue = legacy.severity ? Number.parseFloat(String(legacy.severity).replace(/[^\d.]/g, "")) : null;
+
+  return {
+    ...base,
+    chiefComplaint: complaint || "",
+    site: legacy.site || undefined,
+    onset: legacy.onset || undefined,
+    duration: legacy.duration || undefined,
+    character: legacy.character || undefined,
+    radiation: legacy.radiation || undefined,
+    severity: Number.isFinite(severityValue) ? severityValue : null,
+    associatedSymptoms: legacy.associatedSymptoms
+      ? legacy.associatedSymptoms
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean)
+      : [],
+    timing: legacy.timing || undefined,
+    aggravatingFactors: legacy.exacerbatingFactors || undefined,
+    relievingFactors: legacy.relievingFactors || undefined,
+  };
+};
+
+const toLegacySocrates = (state: Partial<ClinicalState>): SOCRATESResponse => ({
+  site: state.site ?? "",
+  onset: state.onset ?? "",
+  character: state.character ?? "",
+  radiation: state.radiation ?? "",
+  associatedSymptoms: state.associatedSymptoms?.join(", ") ?? "",
+  timing: state.timing ?? "",
+  exacerbatingFactors: state.aggravatingFactors ?? "",
+  relievingFactors: state.relievingFactors ?? "",
+  severity: state.severity != null ? String(state.severity) : "",
+  duration: state.duration ?? "",
+});
+
 export default function Interview() {
   const navigate = useNavigate();
-  const { chiefComplaint, socrates, setSOCRATES, setChiefComplaint, setStep, interviewComplete, setPatient, inputMode, setInputMode } = usePatientStore();
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const { chiefComplaint, socrates, setSOCRATES, setChiefComplaint, setStep, interviewComplete, setInterviewComplete, inputMode, setInputMode, clinicalState, updateClinicalState, language, activeAssessmentId, assessmentStatus, activeInterviewQuestion, activeInterviewTargetField, interviewMessages, setInterviewProgress, setInterviewMessages } = usePatientStore();
+  const [messages, setMessages] = useState<ChatMessage[]>(interviewMessages);
+  const [completionHandled, setCompletionHandled] = useState(false);
   const [inputValue, setInputValue] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [currentQuestion, setCurrentQuestion] = useState("");
+  const [currentQuestion, setCurrentQuestion] = useState(activeInterviewQuestion);
+  const [currentTargetField, setCurrentTargetField] = useState<string | undefined>(activeInterviewTargetField ?? (interviewComplete ? undefined : "chiefComplaint"));
   const [phase, setPhase] = useState<"complaint" | "interview" | "complete">(
-    interviewComplete ? "complete" : chiefComplaint ? "interview" : "complaint"
+    interviewComplete ? "complete" : activeAssessmentId && assessmentStatus === "in-progress" && clinicalState.chiefComplaint ? "interview" : "complaint"
   );
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -83,23 +125,34 @@ export default function Interview() {
       const greeting: ChatMessage = {
         id: "greeting",
         role: "ai",
-        content: `Namaste! I'm your pre-consultation assistant. I'll help prepare a comprehensive case sheet for your doctor. Let's start with your main concern. What brings you here today?`,
+        content: interviewGreeting(language),
         timestamp: new Date().toISOString(),
       };
       setMessages([greeting]);
+      setInterviewMessages([greeting]);
+      if (!interviewComplete) setInterviewProgress("", "chiefComplaint");
     }
-  }, [messages.length]);
+  }, [language]);
 
   const addMessage = (role: "ai" | "patient", content: string) => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `${Date.now()}-${Math.random()}`,
-        role,
-        content,
-        timestamp: new Date().toISOString(),
-      },
-    ]);
+    const newMsg = {
+      id: `${Date.now()}-${Math.random()}`,
+      role,
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    const updated = [...messages, newMsg];
+    setMessages(updated);
+    setInterviewMessages(updated);
+  };
+
+  const markInterviewComplete = (messageText: string) => {
+    if (completionHandled || phase === "complete") return;
+    setCompletionHandled(true);
+    setInterviewComplete(true);
+    setInterviewProgress("", null);
+    setPhase("complete");
+    addMessage("ai", messageText);
   };
 
   const handleVoiceInput = async () => {
@@ -144,7 +197,9 @@ export default function Interview() {
         });
 
         // Process the final text
-        handlePatientResponse(result.text).finally(() => setIsProcessing(false));
+        handlePatientResponse(result.text).catch((error) => {
+          addMessage("ai", error instanceof Error ? error.message : clarificationMessage(language));
+        }).finally(() => setIsProcessing(false));
       } else {
         // Update the interim transcript
         setMessages((prev) => {
@@ -160,13 +215,7 @@ export default function Interview() {
   };
 
   const handlePatientResponse = async (text: string) => {
-    if (phase === "complaint") {
-      setChiefComplaint(text);
-      setPhase("interview");
-      await generateFollowUp(text, socrates);
-    } else {
-      await processAnswer(text);
-    }
+    await processAnswer(text, phase === "complaint" ? "chiefComplaint" : undefined);
   };
 
   const handleTextSubmit = async (e: React.FormEvent) => {
@@ -174,56 +223,111 @@ export default function Interview() {
     if (!inputValue.trim() || isProcessing) return;
 
     const value = inputValue.trim();
-    setInputValue("");
     addMessage("patient", value);
+    setInputValue(""); // Clear immediately
     
     setIsProcessing(true);
-    await handlePatientResponse(value);
-    setIsProcessing(false);
+    try {
+      await handlePatientResponse(value);
+    } catch (error) {
+      addMessage("ai", error instanceof Error ? error.message : clarificationMessage(language));
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const processAnswer = async (answer: string) => {
+  const processAnswer = async (answer: string, targetFieldOverride?: string) => {
     setIsProcessing(true);
 
-    // Determine which SOCRATES field to fill
-    const answeredFields = socratesOrder.filter(
-      (field) => socrates[field as keyof typeof socrates]
+    const currentStore = usePatientStore.getState();
+    const legacyState = toClinicalState(
+      currentStore.chiefComplaint || currentStore.clinicalState.chiefComplaint || chiefComplaint || "",
+      currentStore.socrates
     );
-    const currentField = socratesOrder[answeredFields.length];
+    const baseState = {
+      ...currentStore.clinicalState,
+      chiefComplaint:
+        currentStore.clinicalState.chiefComplaint || currentStore.chiefComplaint || chiefComplaint || "",
+      site: currentStore.clinicalState.site ?? legacyState.site,
+      onset: currentStore.clinicalState.onset ?? legacyState.onset,
+      duration: currentStore.clinicalState.duration ?? legacyState.duration,
+      character: currentStore.clinicalState.character ?? legacyState.character,
+      radiation: currentStore.clinicalState.radiation ?? legacyState.radiation,
+      severity: currentStore.clinicalState.severity ?? legacyState.severity,
+      associatedSymptoms:
+        currentStore.clinicalState.associatedSymptoms.length > 0
+          ? currentStore.clinicalState.associatedSymptoms
+          : legacyState.associatedSymptoms,
+      timing: currentStore.clinicalState.timing ?? legacyState.timing,
+      aggravatingFactors:
+        currentStore.clinicalState.aggravatingFactors ?? legacyState.aggravatingFactors,
+      relievingFactors:
+        currentStore.clinicalState.relievingFactors ?? legacyState.relievingFactors,
+    };
 
-    if (currentField) {
-      setSOCRATES({ [currentField]: answer });
-      const updatedSocrates = { ...socrates, [currentField]: answer };
-
-      // Check if all fields are filled
-      const allFilled = socratesOrder.every(
-        (f) => updatedSocrates[f as keyof typeof updatedSocrates]
-      );
-
-      if (allFilled) {
-        setPhase("complete");
-        addMessage(
-          "ai",
-          "Excellent! I've completed the SOCRATES assessment. Your clinical interview is now complete. Let's proceed to the AYUSH assessment."
-        );
-        setIsProcessing(false);
-        return;
+    const aiService = getAiService();
+    const result = await aiService.processAnswer?.(
+      answer,
+      currentQuestion,
+      baseState,
+      {
+        language: usePatientStore.getState().language || "English",
+        targetField: targetFieldOverride ?? currentTargetField,
       }
+    ) ?? {
+      updatedState: baseState,
+      nextQuestion: null,
+      providerStatus: "LOCAL" as const,
+    };
 
-      await generateFollowUp(chiefComplaint, updatedSocrates);
+    const nextState = result.updatedState;
+    updateClinicalState(nextState);
+    setSOCRATES(toLegacySocrates(nextState));
+    setChiefComplaint(nextState.chiefComplaint ?? chiefComplaint ?? "");
+
+    if (result.nextQuestion?.targetField === "complete" || !result.nextQuestion) {
+      const completionMessage = result.nextQuestion?.question || "Thank you. I have gathered the information needed for your doctor. Please proceed to the next step.";
+      markInterviewComplete(completionMessage);
+      setCurrentQuestion("");
+      setCurrentTargetField(undefined);
+      setIsProcessing(false);
+      return;
+    }
+
+    const nextTargetField = result.nextQuestion.targetField;
+    setCurrentQuestion(result.nextQuestion.question);
+    setCurrentTargetField(nextTargetField);
+    setInterviewProgress(result.nextQuestion.question, nextTargetField);
+    setPhase(nextTargetField === "chiefComplaint" ? "complaint" : "interview");
+    addMessage("ai", result.nextQuestion.question);
+
+    if (inputMode === "voice") {
+      const ttsService = getTtsService();
+      ttsService.speak(result.nextQuestion.question, usePatientStore.getState().language || "English");
     }
 
     setIsProcessing(false);
   };
 
-  const generateFollowUp = async (complaint: string, currentSocrates: Record<string, string>) => {
+  const generateFollowUp = async (complaint: string, currentState: ClinicalState) => {
     const aiService = getAiService();
-    const nextQ = await aiService.getNextQuestion(currentSocrates as any, complaint);
-    
+    const nextQ = await aiService.getNextQuestion(
+      { ...socrates, chiefComplaint: complaint },
+      complaint,
+      currentState,
+      usePatientStore.getState().language || "English"
+    );
+
     setCurrentQuestion(nextQ.question);
+    setCurrentTargetField(nextQ.targetField);
+
+    if (nextQ.targetField === "complete") {
+      markInterviewComplete(nextQ.question);
+      return;
+    }
+
     addMessage("ai", nextQ.question);
-    
-    // Auto-speak if input mode is voice
+
     if (inputMode === "voice") {
       const ttsService = getTtsService();
       ttsService.speak(nextQ.question, usePatientStore.getState().language || "English");
@@ -262,7 +366,7 @@ export default function Interview() {
                         Clinical Interview
                       </CardTitle>
                       <p className="text-[10px] text-muted-foreground">
-                        AI Model: Llama-3 — Simulated
+                        Local clinical interview
                       </p>
                     </div>
                   </div>
@@ -326,11 +430,7 @@ export default function Interview() {
                   <Input
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
-                    placeholder={
-                      phase === "complaint"
-                        ? "Describe your main symptom..."
-                        : "Type your answer..."
-                    }
+                    placeholder={placeholderText(phase === "complete" ? "interview" : phase, language)}
                     disabled={isProcessing}
                     className="flex-1"
                   />
@@ -350,42 +450,9 @@ export default function Interview() {
 
                 {/* Simulated voice button fallback */}
                 {phase !== "complete" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="w-full mt-2 text-xs text-muted-foreground"
-                    onClick={async () => {
-                      setIsProcessing(true);
-                      const responses: Record<string, string> = {
-                        chest: "The pain is in the center of my chest, feeling like a heavy pressure. It started suddenly this morning. It spreads to my left arm. I also feel breathless and sweaty.",
-                        stomach: "The pain is in my upper abdomen, especially after eating. It's been about 3 months. It feels heavy and cramping. I also have bloating and nausea.",
-                        joint: "My right knee hurts. It started about 2 weeks ago. It's a dull ache, worse in the morning with stiffness. No swelling.",
-                      };
-
-                      const complaintLower = chiefComplaint?.toLowerCase() || "";
-                      let response = "I've been having discomfort for a few days now. It's moderate severity, worse at certain times of the day.";
-                      if (complaintLower.includes("chest")) response = responses.chest;
-                      else if (complaintLower.includes("stomach") || complaintLower.includes("abdomen")) response = responses.stomach;
-                      else if (complaintLower.includes("joint") || complaintLower.includes("knee")) response = responses.joint;
-
-                      addMessage("patient", response);
-
-                      // Fill all SOCRATES fields
-                      const socratesData = complaintLower.includes("chest")
-                        ? { site: "Retrosternal center", onset: "Sudden, this morning", character: "Heavy pressure", radiation: "Left arm", associatedSymptoms: "Breathlessness, sweating", timing: "Persistent", exacerbatingFactors: "Physical activity", relievingFactors: "None", severity: "7/10 — Significant" }
-                        : complaintLower.includes("stomach")
-                          ? { site: "Upper abdomen, epigastric", onset: "Gradual, 3 months", character: "Heavy, cramping", radiation: "No radiation", associatedSymptoms: "Bloating, nausea", timing: "After meals", exacerbatingFactors: "Spicy food, heavy meals", relievingFactors: "Antacids", severity: "6/10 — Moderate" }
-                          : { site: "Right knee, medial", onset: "Gradual, 2 weeks", character: "Dull, aching", radiation: "No radiation", associatedSymptoms: "Morning stiffness", timing: "Worse in morning", exacerbatingFactors: "Prolonged sitting", relievingFactors: "Warm compress", severity: "3/10 — Mild" };
-
-                      setSOCRATES(socratesData);
-                      setPhase("complete");
-                      addMessage("ai", "Thank you! I've recorded your complete SOCRATES assessment. Your clinical interview is now complete. Let's proceed to the AYUSH assessment.");
-                      setIsProcessing(false);
-                    }}
-                  >
-                    <Volume2 className="w-3 h-3 mr-1" />
-                    Simulate Voice Response (Demo)
-                  </Button>
+                  <div className="mt-2 rounded-md border border-dashed border-vintage-blue/20 bg-vintage-blue/5 px-3 py-2 text-[11px] text-muted-foreground">
+                    Local interview engine active: answers are processed through the clinical planner and fallback AI service.
+                  </div>
                 )}
 
                 {isListening && (
@@ -451,7 +518,7 @@ export default function Interview() {
                     >
                       <div className="flex items-center justify-between mb-1">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                          {socratesLabels[field].label}
+                          {getFieldLabel(field, language)}
                         </p>
                         {value && (
                           <span className="text-[10px] text-vintage-green font-semibold">
@@ -463,7 +530,7 @@ export default function Interview() {
                         <p className="text-sm text-foreground">{value}</p>
                       ) : (
                         <p className="text-xs text-muted-foreground italic">
-                          {isActive ? "Awaiting response..." : socratesLabels[field].description}
+                          {isActive ? (language === "Hindi" ? "उत्तर की प्रतीक्षा है..." : language === "Telugu" ? "సమాధానం కోసం వేచి ఉంది..." : "Awaiting response...") : fieldDescription(field, language)}
                         </p>
                       )}
                     </div>

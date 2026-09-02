@@ -36,6 +36,24 @@ export interface PatientState {
 
   // ── NEW: Centralized ClinicalState ──────────────────────────────────────
   clinicalState: ClinicalState;
+  activeAssessmentId: string | null;
+  assessmentStatus: "idle" | "in-progress" | "completed";
+  activeInterviewQuestion: string;
+  activeInterviewTargetField: string | null;
+  interviewMessages: Array<{ id: string; role: "ai" | "patient"; content: string; timestamp: string }>;
+  consultationHistory: Array<{
+    id: string;
+    completedAt: string;
+    clinicalState: ClinicalState;
+    socrates: SOCRATESResponse;
+    ayush: AYUSHAssessment;
+    aharaVihara: AharaVihara;
+    documents: DocumentExtraction[];
+    timeline: TimelineEvent[];
+    triage: TriageResult | null;
+    caseSheet: CaseSheetData | null;
+    verification: DoctorVerification;
+  }>;
 
   // AYUSH
   ayush: AYUSHAssessment;
@@ -70,6 +88,8 @@ export interface PatientState {
 
   // ── Actions ──────────────────────────────────────────────────────────────
   setPatient: (data: Partial<PatientState>) => void;
+  loginPatient: (identity: PatientIdentity, data?: Partial<PatientState>) => void;
+  logoutPatient: () => void;
   setChiefComplaint: (complaint: string) => void;
   setSOCRATES: (data: Partial<SOCRATESResponse>) => void;
   setAYUSH: (data: Partial<AYUSHAssessment>) => void;
@@ -84,6 +104,10 @@ export interface PatientState {
   setInputMode: (mode: "voice" | "touch") => void;
   setStep: (step: string) => void;
   setInterviewComplete: (complete: boolean) => void;
+  startNewAssessment: () => void;
+  completeAssessment: () => void;
+  setInterviewProgress: (question: string, targetField: string | null) => void;
+  setInterviewMessages: (messages: PatientState["interviewMessages"]) => void;
 
   // ── ClinicalState actions ─────────────────────────────────────────────────
   updateClinicalState: (updates: Partial<ClinicalState>) => void;
@@ -140,6 +164,12 @@ export const usePatientStore = create<PatientState>()(
 
       // ClinicalState
       clinicalState: defaultClinicalState(),
+      activeAssessmentId: null,
+      assessmentStatus: "idle",
+      activeInterviewQuestion: "",
+      activeInterviewTargetField: null,
+      interviewMessages: [],
+      consultationHistory: [],
 
       // AYUSH
       ayush: defaultAYUSH,
@@ -174,6 +204,29 @@ export const usePatientStore = create<PatientState>()(
 
       // ── Actions ────────────────────────────────────────────────────────────
       setPatient: (data) => set((state) => ({ ...state, ...data })),
+
+      loginPatient: (identity, data = {}) =>
+        set((state) => ({
+          ...state,
+          ...data,
+          id: identity.patientId,
+          name: identity.displayName,
+          abhaId: identity.abhaId ?? state.abhaId,
+          currentPatient: identity,
+          isAuthenticated: true,
+          authenticationProvider: identity.identityProvider,
+          verificationStatus: identity.verificationStatus,
+        })),
+
+      logoutPatient: () =>
+        set((state) => ({
+          ...state,
+          isAuthenticated: false,
+          currentPatient: null,
+          currentStep: "landing",
+          consentGiven: false,
+          inputMode: null,
+        })),
 
       setChiefComplaint: (complaint) =>
         set((state) => ({
@@ -230,6 +283,61 @@ export const usePatientStore = create<PatientState>()(
       setInputMode: (mode) => set({ inputMode: mode }),
       setStep: (step) => set({ currentStep: step }),
       setInterviewComplete: (complete) => set({ interviewComplete: complete }),
+
+      startNewAssessment: () =>
+        set((state) => ({
+          chiefComplaint: "",
+          socrates: defaultSOCRATES,
+          interviewComplete: false,
+          clinicalState: defaultClinicalState(),
+          ayush: defaultAYUSH,
+          aharaVihara: defaultAharaVihara(),
+          ayushComplete: false,
+          documents: [],
+          ocrResults: null,
+          timeline: [],
+          triage: null,
+          caseSheet: null,
+          verification: { status: "pending" },
+          consentGiven: false,
+          inputMode: null,
+          activeAssessmentId: `assessment-${Date.now()}`,
+          assessmentStatus: "in-progress",
+          activeInterviewQuestion: "",
+          activeInterviewTargetField: "chiefComplaint",
+          interviewMessages: [],
+          consultationHistory: state.consultationHistory,
+        })),
+
+      completeAssessment: () =>
+        set((state) => {
+          if (!state.activeAssessmentId || state.assessmentStatus === "completed") return state;
+          return {
+            interviewComplete: true,
+            assessmentStatus: "completed",
+            consultationHistory: [
+              ...state.consultationHistory,
+              {
+                id: state.activeAssessmentId,
+                completedAt: new Date().toISOString(),
+                clinicalState: state.clinicalState,
+                socrates: state.socrates,
+                ayush: state.ayush,
+                aharaVihara: state.aharaVihara,
+                documents: state.documents,
+                timeline: state.timeline,
+                triage: state.triage,
+                caseSheet: state.caseSheet,
+                verification: state.verification,
+              },
+            ],
+          };
+        }),
+
+      setInterviewProgress: (question, targetField) =>
+        set({ activeInterviewQuestion: question, activeInterviewTargetField: targetField }),
+
+      setInterviewMessages: (messages) => set({ interviewMessages: messages }),
 
       // ── ClinicalState actions ───────────────────────────────────────────────
       updateClinicalState: (updates) =>
@@ -316,6 +424,12 @@ export const usePatientStore = create<PatientState>()(
           socrates: defaultSOCRATES,
           interviewComplete: false,
           clinicalState: defaultClinicalState(),
+          activeAssessmentId: null,
+          assessmentStatus: "idle",
+          activeInterviewQuestion: "",
+          activeInterviewTargetField: null,
+          interviewMessages: [],
+          consultationHistory: [],
           ayush: defaultAYUSH,
           aharaVihara: defaultAharaVihara(),
           ayushComplete: false,
