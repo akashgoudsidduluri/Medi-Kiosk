@@ -25,7 +25,24 @@ const typeConfig: Record<string, { icon: typeof Stethoscope; color: string; bg: 
 
 export default function Timeline() {
   const navigate = useNavigate();
-  const { timeline, documents, setStep } = usePatientStore();
+  const { timeline, documents, setStep, clinicalState } = usePatientStore();
+
+  const derivedDocumentTimeline = (documents ?? []).flatMap((doc) => {
+    const dateValue = doc.extractedData?.date;
+    if (!dateValue || dateValue === "Date unavailable" || dateValue === "Not detected") return [];
+    const facts = (doc.documentFacts ?? []).filter((fact) => fact.verified || fact.status === "confirmed" || fact.status === "edited");
+    if (facts.length === 0) return [];
+    return facts.slice(0, 3).map((fact) => ({
+      id: `${doc.id}-${fact.field}`,
+      date: dateValue,
+      title: fact.field,
+      description: fact.value,
+      type: fact.field.toLowerCase().includes("med") ? "medication" : fact.field.toLowerCase().includes("lab") ? "lab" : "observation",
+      source: fact.source,
+    }));
+  });
+
+  const effectiveTimeline = [...timeline, ...derivedDocumentTimeline];
 
   const parseTimelineDate = (value?: string) => {
     if (!value || value === "Date unavailable" || value === "Not detected") return null;
@@ -35,7 +52,7 @@ export default function Timeline() {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
   };
 
-  const sortedTimeline = [...timeline].sort((a, b) => {
+  const sortedTimeline = [...effectiveTimeline].sort((a, b) => {
     const aDate = parseTimelineDate(a.date);
     const bDate = parseTimelineDate(b.date);
 

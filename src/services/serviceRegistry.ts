@@ -13,6 +13,7 @@ import { MockTtsService } from "./tts/MockTtsService";
 import { OcrService } from "./ocr/OcrService";
 import { TesseractOcrService } from "./ocr/TesseractOcrService";
 import { MockOcrService } from "./ocr/MockOcrService";
+import { IDocumentIntelligenceService, LocalDocumentIntelligenceService } from "./documents/DocumentIntelligenceService";
 import { TriageService } from "./triage/TriageService";
 import { LocalTriageService } from "./triage/LocalTriageService";
 import { FhirService } from "./fhir/FhirService";
@@ -26,6 +27,33 @@ export const getAppMode = (): AppMode => {
   const mode = (import.meta.env.APP_MODE ?? import.meta.env.VITE_APP_MODE ?? "demo") as string;
   if (mode === "hybrid" || mode === "production") return mode as AppMode;
   return "demo";
+};
+
+const shouldForceMockVoice = (): boolean => {
+  const raw = (
+    import.meta.env.VITE_USE_MOCK_VOICE ??
+    import.meta.env.VITE_MOCK_VOICE ??
+    ""
+  )
+    .toString()
+    .trim()
+    .toLowerCase();
+
+  return raw === "1" || raw === "true" || raw === "yes";
+};
+
+const browserVoiceAvailable = () => {
+  if (typeof window === "undefined") return { asr: false, tts: false };
+
+  const browserWindow = window as typeof window & {
+    SpeechRecognition?: unknown;
+    webkitSpeechRecognition?: unknown;
+  };
+
+  return {
+    asr: typeof browserWindow.SpeechRecognition !== "undefined" || typeof browserWindow.webkitSpeechRecognition !== "undefined",
+    tts: "speechSynthesis" in window,
+  };
 };
 
 // --- AI Service Resolver ---
@@ -66,11 +94,10 @@ let asrServiceInstance: AsrService | null = null;
 export const getAsrService = (): AsrService => {
   if (asrServiceInstance) return asrServiceInstance;
 
-  const mode = getAppMode();
-  if (mode === "hybrid" || mode === "production") {
-    const browserAsr = new BrowserAsrService();
-    if (browserAsr.isSupported()) {
-      asrServiceInstance = browserAsr;
+  if (!shouldForceMockVoice()) {
+    const voiceCapabilities = browserVoiceAvailable();
+    if (voiceCapabilities.asr) {
+      asrServiceInstance = new BrowserAsrService();
       return asrServiceInstance;
     }
   }
@@ -84,11 +111,10 @@ let ttsServiceInstance: TtsService | null = null;
 export const getTtsService = (): TtsService => {
   if (ttsServiceInstance) return ttsServiceInstance;
 
-  const mode = getAppMode();
-  if (mode === "hybrid" || mode === "production") {
-    const browserTts = new BrowserTtsService();
-    if (browserTts.isSupported()) {
-      ttsServiceInstance = browserTts;
+  if (!shouldForceMockVoice()) {
+    const voiceCapabilities = browserVoiceAvailable();
+    if (voiceCapabilities.tts) {
+      ttsServiceInstance = new BrowserTtsService();
       return ttsServiceInstance;
     }
   }
@@ -102,17 +128,22 @@ let ocrServiceInstance: OcrService | null = null;
 export const getOcrService = (): OcrService => {
   if (ocrServiceInstance) return ocrServiceInstance;
 
-  // Try Tesseract in ALL modes (demo, hybrid, production)
-  // This ensures real files are actually OCR-processed, not replaced with demo data
   const tesseractOcr = new TesseractOcrService();
   if (tesseractOcr.isSupported()) {
     ocrServiceInstance = tesseractOcr;
     return ocrServiceInstance;
   }
 
-  // Only use MockOcrService as a true fallback (e.g., if browser doesn't support WebAssembly)
   ocrServiceInstance = new MockOcrService();
   return ocrServiceInstance;
+};
+
+// --- Document Intelligence Service ---
+let documentIntelligenceServiceInstance: IDocumentIntelligenceService | null = null;
+export const getDocumentIntelligenceService = (): IDocumentIntelligenceService => {
+  if (documentIntelligenceServiceInstance) return documentIntelligenceServiceInstance;
+  documentIntelligenceServiceInstance = new LocalDocumentIntelligenceService();
+  return documentIntelligenceServiceInstance;
 };
 
 // --- Triage Service ---

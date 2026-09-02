@@ -2,78 +2,109 @@ import { AsrService, TranscriptionResult } from "./AsrService";
 
 export class BrowserAsrService implements AsrService {
   private recognition: any = null;
+  private isListening = false;
 
   constructor() {
-    // Attempt to access the browser's SpeechRecognition API (Chrome/Safari)
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       this.recognition = new SpeechRecognition();
-      this.recognition.continuous = true;
-      this.recognition.interimResults = true;
+      this.recognition.continuous = false;
+      this.recognition.interimResults = false;
     }
   }
 
   isSupported(): boolean {
-    return this.recognition !== null;
+    return typeof window !== "undefined" && (!!(window as any).SpeechRecognition || !!(window as any).webkitSpeechRecognition);
+  }
+
+  private getLanguageCode(language?: string): string {
+    const normalized = (language ?? "English").trim();
+    const langMap: Record<string, string> = {
+      English: "en-IN",
+      Hindi: "hi-IN",
+      Telugu: "te-IN",
+      Tamil: "ta-IN",
+      Marathi: "mr-IN",
+      Kannada: "kn-IN",
+      Gujarati: "gu-IN",
+      Bengali: "bn-IN",
+    };
+
+    return langMap[normalized] ?? "en-IN";
   }
 
   startListening(language: string, onResult: (result: TranscriptionResult) => void): void {
-    if (!this.recognition) return;
+    if (!this.recognition) {
+      console.error("[ASR] available: false");
+      return;
+    }
 
-    // Map common languages to BCP-47 tags expected by SpeechRecognition
-    const langMap: Record<string, string> = {
-      "English": "en-IN",
-      "Hindi": "hi-IN",
-      "Telugu": "te-IN",
-      "Marathi": "mr-IN",
-      "Tamil": "ta-IN",
-      "Gujarati": "gu-IN",
-      "Urdu": "ur-IN",
-      "Kannada": "kn-IN",
-      "Odia": "or-IN",
-      "Malayalam": "ml-IN",
-      "Punjabi": "pa-IN",
+    const languageCode = this.getLanguageCode(language);
+    console.log("[ASR] service: browser-recognition");
+    console.log("[ASR] available:", true);
+    console.log("[ASR] language:", languageCode);
+
+    if (this.isListening) {
+      try {
+        this.recognition.stop();
+      } catch (error) {
+        console.warn("[ASR] stop before restart warning:", error);
+      }
+    }
+
+    this.recognition.lang = languageCode;
+    this.recognition.continuous = false;
+    this.recognition.interimResults = false;
+
+    this.recognition.onstart = () => {
+      this.isListening = true;
+      console.log("[ASR] started");
     };
 
-    this.recognition.lang = langMap[language] || "en-IN";
-
     this.recognition.onresult = (event: any) => {
-      let interimTranscript = "";
       let finalTranscript = "";
-
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const transcriptPart = event.results[i][0]?.transcript ?? "";
         if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
+          finalTranscript += transcriptPart;
         }
       }
 
-      if (finalTranscript) {
-        onResult({ text: finalTranscript, isFinal: true, languageCode: this.recognition.lang });
-      } else if (interimTranscript) {
-        onResult({ text: interimTranscript, isFinal: false, languageCode: this.recognition.lang });
+      if (finalTranscript.trim()) {
+        const transcript = finalTranscript.trim();
+        console.log("[ASR] result:", transcript);
+        onResult({ text: transcript, isFinal: true, languageCode });
       }
     };
 
     this.recognition.onerror = (event: any) => {
-      console.error("Speech recognition error", event.error);
+      this.isListening = false;
+      console.error("[ASR] error:", event?.error, event?.message ?? "");
+    };
+
+    this.recognition.onend = () => {
+      this.isListening = false;
+      console.log("[ASR] ended");
     };
 
     try {
+      console.log("[ASR] start called");
       this.recognition.start();
-    } catch (e) {
-      console.error("Error starting speech recognition", e);
+    } catch (error) {
+      console.error("[ASR] start failed:", error);
+      this.isListening = false;
     }
   }
 
   stopListening(): void {
-    if (this.recognition) {
-      try {
-        this.recognition.stop();
-      } catch (e) {
-        // Ignore if already stopped
-      }
+    if (!this.recognition) return;
+
+    try {
+      this.recognition.stop();
+      this.isListening = false;
+      console.log("[ASR] stop called");
+    } catch (error) {
+      console.warn("[ASR] stop warning:", error);
     }
   }
 }

@@ -47,6 +47,79 @@ export interface ClinicalFact {
   verified: boolean;
   timestamp?: string;
   documentId?: string;
+  evidence?: string;
+  originalValue?: string;
+  editedValue?: string;
+  status?: "pending" | "confirmed" | "edited" | "rejected";
+  verifiedBy?: string;
+  verifiedAt?: string;
+}
+
+export type DocumentType =
+  | "prescription"
+  | "laboratory-report"
+  | "discharge-summary"
+  | "consultation-note"
+  | "medical-certificate"
+  | "identity-document"
+  | "unknown";
+
+export type ConfidenceLevel = "high" | "medium" | "low";
+
+export interface DocumentPatientSummary {
+  name?: string;
+  age?: string;
+  gender?: string;
+  weight?: string;
+}
+
+export interface DocumentHeaderSummary {
+  documentDate?: string;
+  doctor?: string;
+  facility?: string;
+}
+
+export interface DocumentMedicationSummary {
+  name?: string;
+  strength?: string;
+  dose?: string;
+  route?: string;
+  frequency?: string;
+  duration?: string;
+  instructions?: string;
+  raw?: string;
+}
+
+export interface DocumentLabResult {
+  testName?: string;
+  result?: string;
+  unit?: string;
+  referenceRange?: string;
+  status?: "normal" | "abnormal" | "uncertain";
+  testDate?: string;
+  raw?: string;
+}
+
+export interface DocumentAnalysis {
+  documentType: DocumentType;
+  classificationConfidence: number;
+  classificationConfidenceLevel: ConfidenceLevel;
+  reviewRequired: boolean;
+  verificationStatus: "requires-review" | "verified" | "rejected";
+  rawOcrText: string;
+  ocrEngine: "tesseract" | "unknown";
+  patient?: DocumentPatientSummary;
+  document?: DocumentHeaderSummary;
+  clinical?: {
+    chiefComplaint?: string;
+    diagnosis?: string;
+    symptoms?: string[];
+    vitals?: Record<string, string>;
+  };
+  medications?: DocumentMedicationSummary[];
+  labResults?: DocumentLabResult[];
+  structuredFacts: ClinicalFact[];
+  warnings?: string[];
 }
 
 export interface ClinicalContradiction {
@@ -260,6 +333,12 @@ export interface DocumentExtraction {
   timestamp?: string;
   error?: string;
   documentFacts?: ClinicalFact[]; // NEW: structured facts from this doc
+  documentType?: DocumentType;
+  classificationConfidence?: number;
+  classificationConfidenceLevel?: ConfidenceLevel;
+  reviewRequired?: boolean;
+  verificationStatus?: "requires-review" | "verified" | "rejected";
+  warnings?: string[];
   [key: string]: unknown;
 }
 
