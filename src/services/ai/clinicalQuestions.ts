@@ -42,9 +42,12 @@ const chestPainPlan: ComplaintQuestionPlan = {
     "associatedSymptoms",
     "aggravatingFactors",
     "relievingFactors",
+    "timing",
     "pastMedicalHistory",
     "medications",
     "allergies",
+    "familyHistory",
+    "personalHistory",
   ],
   required: ["site", "onset", "character", "severity", "radiation", "associatedSymptoms", "aggravatingFactors", "relievingFactors"],
   questions: {
@@ -57,9 +60,12 @@ const chestPainPlan: ComplaintQuestionPlan = {
     associatedSymptoms: "Are you experiencing any other symptoms like breathlessness, sweating, or nausea?",
     aggravatingFactors: "Does anything make the pain worse?",
     relievingFactors: "Does anything make the pain better, like rest or medication?",
+    timing: "When does the chest pain tend to happen?",
     pastMedicalHistory: "Do you have any past medical conditions like heart disease or high blood pressure?",
     medications: "Are you currently taking any medications?",
     allergies: "Do you have any known allergies to medications?",
+    familyHistory: "Does anyone in your family have heart disease?",
+    personalHistory: "Do you smoke, or have any other habits we should note?",
   },
 };
 
@@ -78,6 +84,8 @@ const abdominalPainPlan: ComplaintQuestionPlan = {
     "relievingFactors",
     "pastMedicalHistory",
     "medications",
+    "allergies",
+    "familyHistory",
   ],
   required: ["site", "onset", "character", "severity", "associatedSymptoms"],
   questions: {
@@ -92,6 +100,8 @@ const abdominalPainPlan: ComplaintQuestionPlan = {
     relievingFactors: "Does anything make the pain better?",
     pastMedicalHistory: "Have you had any abdominal surgeries or conditions in the past?",
     medications: "Are you currently taking any medications?",
+    allergies: "Do you have any known allergies?",
+    familyHistory: "Does anyone in your family have similar abdominal or digestive problems?",
   },
 };
 
@@ -109,6 +119,7 @@ const headachePlan: ComplaintQuestionPlan = {
     "relievingFactors",
     "pastMedicalHistory",
     "medications",
+    "allergies",
   ],
   required: ["site", "onset", "severity", "character", "associatedSymptoms"],
   questions: {
@@ -122,6 +133,7 @@ const headachePlan: ComplaintQuestionPlan = {
     relievingFactors: "Does anything help relieve the headache?",
     pastMedicalHistory: "Have you had similar headaches before or any neurological conditions?",
     medications: "Are you taking any medications for the headache?",
+    allergies: "Do you have any known allergies?",
   },
 };
 
@@ -134,8 +146,11 @@ const feverPlan: ComplaintQuestionPlan = {
     "severity",
     "associatedSymptoms",
     "aggravatingFactors",
+    "relievingFactors",
+    "timing",
     "pastMedicalHistory",
     "medications",
+    "allergies",
   ],
   required: ["onset", "duration", "associatedSymptoms"],
   questions: {
@@ -145,8 +160,10 @@ const feverPlan: ComplaintQuestionPlan = {
     associatedSymptoms: "Are you experiencing chills, sweating, body pain, cough, or rash?",
     aggravatingFactors: "Have you been in contact with anyone who was unwell recently, or traveled anywhere?",
     relievingFactors: "Have you taken any medication to bring the fever down?",
+    timing: "Is the fever constant, or does it come and go?",
     pastMedicalHistory: "Do you have any medical conditions that affect your immune system?",
     medications: "Are you currently taking any regular medications?",
+    allergies: "Do you have any known allergies?",
   },
 };
 
@@ -163,6 +180,8 @@ const coughBreathlessnessPlan: ComplaintQuestionPlan = {
     "relievingFactors",
     "pastMedicalHistory",
     "medications",
+    "allergies",
+    "personalHistory",
   ],
   required: ["onset", "duration", "character", "associatedSymptoms"],
   questions: {
@@ -175,6 +194,8 @@ const coughBreathlessnessPlan: ComplaintQuestionPlan = {
     relievingFactors: "Does anything help, like an inhaler or sitting up?",
     pastMedicalHistory: "Do you have asthma, COPD, or any lung conditions?",
     medications: "Are you using any inhalers or taking any medications?",
+    allergies: "Do you have any known allergies?",
+    personalHistory: "Do you smoke, or have you been exposed to dust or fumes?",
   },
 };
 
@@ -193,6 +214,8 @@ const generalPlan: ComplaintQuestionPlan = {
     "pastMedicalHistory",
     "medications",
     "allergies",
+    "familyHistory",
+    "personalHistory",
   ],
   required: ["onset", "severity", "associatedSymptoms"],
   questions: {
@@ -207,6 +230,8 @@ const generalPlan: ComplaintQuestionPlan = {
     pastMedicalHistory: "Do you have any existing medical conditions?",
     medications: "Are you taking any medications?",
     allergies: "Do you have any known allergies?",
+    familyHistory: "Does anyone in your family have similar problems?",
+    personalHistory: "Do you smoke, drink alcohol, or have other habits we should note?",
   },
 };
 
@@ -225,11 +250,11 @@ const plans: ComplaintQuestionPlan[] = [
  */
 export function detectComplaintType(complaint: string): ComplaintType {
   const lc = complaint.toLowerCase();
-  if (/chest\s?pain|cardiac|heart/.test(lc)) return "chest_pain";
-  if (/abdom|stomach|belly|gut|bowel|nausea|vomit/.test(lc)) return "abdominal_pain";
-  if (/head\s?ache|migraine|head\s?pain/.test(lc)) return "headache";
-  if (/fever|temperature|pyrexia|chills/.test(lc)) return "fever";
-  if (/cough|breath|wheez|dyspnoe|respiratory/.test(lc)) return "cough_breathlessness";
+  if (/chest\s?pain|cardiac|heart|छाती|सीने|గుండె|ఛాతీ/.test(lc)) return "chest_pain";
+  if (/abdom|stomach|belly|gut|bowel|nausea|vomit|पेट|కడుపు/.test(lc)) return "abdominal_pain";
+  if (/head\s?ache|migraine|head\s?pain|सिर.?दर्द|తలనొప్పి/.test(lc)) return "headache";
+  if (/fever|temperature|pyrexia|chills|बुखार|జ్వరం/.test(lc)) return "fever";
+  if (/cough|breath|wheez|dyspnoe|respiratory|खांसी|सांस|దగ్గు|ఊపిరి/.test(lc)) return "cough_breathlessness";
   return "general";
 }
 

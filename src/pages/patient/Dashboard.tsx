@@ -24,7 +24,18 @@ type DashboardView = "overview" | "consultation-detail";
 
 export default function PatientDashboard() {
   const navigate = useNavigate();
-  const { currentPatient, name, abhaId, clinicalState, ayush, documents, timeline, triage, logoutPatient } = usePatientStore();
+  const currentPatient = usePatientStore((state) => state.currentPatient);
+  const name = usePatientStore((state) => state.name);
+  const abhaId = usePatientStore((state) => state.abhaId);
+  const clinicalState = usePatientStore((state) => state.clinicalState);
+  const ayush = usePatientStore((state) => state.ayush);
+  const documents = usePatientStore((state) => state.documents);
+  const timeline = usePatientStore((state) => state.timeline);
+  const triage = usePatientStore((state) => state.triage);
+  const consultationHistory = usePatientStore((state) => state.consultationHistory);
+  const logoutPatient = usePatientStore((state) => state.logoutPatient ?? state.reset);
+  const startNewAssessment = usePatientStore((state) => state.startNewAssessment);
+
   const authService = getAuthService();
   const [view, setView] = useState<DashboardView>("overview");
   const [selectedConsultation, setSelectedConsultation] = useState<string | null>(null);
@@ -38,15 +49,16 @@ export default function PatientDashboard() {
   };
 
   const handleStartAssessment = () => {
+    startNewAssessment();
     navigate("/patient/consent");
   };
 
   // Demo previous consultations
-  const previousConsultations = [
+  const demoConsultations = [
     {
       id: "cons-001",
       date: "15 Aug 2026",
-      chiefComplaint: "Mild joint pain in knee",
+      chiefComplaint: "[DEMO] Mild joint pain in knee",
       priority: "routine" as const,
       status: "Completed",
       casesheetAvailable: true,
@@ -54,11 +66,27 @@ export default function PatientDashboard() {
     {
       id: "cons-002",
       date: "08 Aug 2026",
-      chiefComplaint: "Abdominal discomfort",
+      chiefComplaint: "[DEMO] Abdominal discomfort",
       priority: "priority" as const,
       status: "Completed",
       casesheetAvailable: true,
     },
+  ];
+
+  const previousConsultations = [
+    ...consultationHistory.map((consultation) => ({
+      id: consultation.id,
+      date: new Date(consultation.completedAt).toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      }),
+      chiefComplaint: consultation.clinicalState.chiefComplaint || "Clinical assessment",
+      priority: "routine" as const,
+      status: "Completed",
+      casesheetAvailable: true,
+    })),
+    ...demoConsultations,
   ];
 
   // ════════════════════════════════════════════════════════════════

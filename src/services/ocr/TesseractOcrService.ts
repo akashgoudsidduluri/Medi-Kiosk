@@ -8,22 +8,25 @@ export class TesseractOcrService implements OcrService {
 
   async extractText(file: File): Promise<OcrResult> {
     try {
-      // Basic validation for image type since Tesseract.js in browser handles images best
       if (!file.type.startsWith('image/')) {
         throw new Error("Only image files are supported by Tesseract in the browser currently.");
       }
 
       const result = await Tesseract.recognize(
         file,
-        'eng', // Default to English for now
+        'eng',
         {
-          logger: (m: any) => console.log(m) // Optional logging
+          logger: (m: any) => console.log(m)
         }
       );
 
       return {
         text: result.data.text,
         confidence: result.data.confidence,
+        entities: {
+          textLength: result.data.text.length,
+          confidence: result.data.confidence,
+        },
       };
     } catch (error) {
       console.error("Tesseract OCR Error:", error);

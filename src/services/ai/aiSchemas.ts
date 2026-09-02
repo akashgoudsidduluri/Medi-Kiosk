@@ -20,6 +20,9 @@ export const GroqExtractedFieldsSchema = z.object({
   pastMedicalHistory: z.array(z.string()),
   medications: z.array(z.string()),
   allergies: z.array(z.string()),
+  familyHistory: z.string().nullable().optional().default(null),
+  personalHistory: z.string().nullable().optional().default(null),
+  unknownFields: z.array(z.string()).optional().default([]),
 });
 
 // ── Next question suggestion ──────────────────────────────────────────────────

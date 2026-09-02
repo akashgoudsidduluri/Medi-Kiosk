@@ -66,7 +66,10 @@ export default function CaseSheet() {
     timeline,
     triage,
     verification,
+    clinicalState,
+    aharaVihara,
     setVerification,
+    completeAssessment,
     setStep,
   } = store;
 
@@ -217,6 +220,36 @@ export default function CaseSheet() {
             </CardContent>
           </Card>
 
+          {/* HPI and structured history */}
+          <Card className="vintage-card">
+            <CardHeader>
+              <CardTitle className="text-sm" style={{ fontFamily: "Georgia, serif" }}>History of Present Illness</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-foreground">
+              <p><strong>Chief complaint:</strong> {chiefComplaint || "Not provided"}</p>
+              <p><strong>Onset:</strong> {socrates.onset || "Not provided"}</p>
+              <p><strong>Duration:</strong> {clinicalState.duration || "Not provided"}</p>
+              <p><strong>Site / character:</strong> {[socrates.site, socrates.character].filter(Boolean).join("; ") || "Not provided"}</p>
+              <p><strong>Associated symptoms:</strong> {socrates.associatedSymptoms || "Not provided"}</p>
+            </CardContent>
+          </Card>
+
+          <Card className="vintage-card">
+            <CardHeader>
+              <CardTitle className="text-sm" style={{ fontFamily: "Georgia, serif" }}>Medical History</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              <p><strong>Past medical history:</strong> {clinicalState.pastMedicalHistory.join(", ") || "Not provided"}</p>
+              <p><strong>Past surgical history:</strong> {clinicalState.personalHistory || "Not provided"}</p>
+              <p><strong>Medications:</strong> {clinicalState.medications.join(", ") || "Not provided"}</p>
+              <p><strong>Allergies:</strong> {clinicalState.allergies.join(", ") || "Not provided"}</p>
+              <p><strong>Family history:</strong> {clinicalState.familyHistory || "Not provided"}</p>
+              <p><strong>Personal history:</strong> {clinicalState.personalHistory || "Not provided"}</p>
+              <p><strong>ROS:</strong> {Object.entries(clinicalState.reviewOfSystems).map(([key, value]) => `${key}: ${value}`).join("; ") || "Not provided"}</p>
+              <p><strong>Prior investigations:</strong> {documents.map((doc) => doc.extractedData.investigations || "").filter(Boolean).join(", ") || "Not provided"}</p>
+            </CardContent>
+          </Card>
+
           {/* AYUSH Assessment */}
           <Card className="vintage-card">
             <CardHeader>
@@ -288,6 +321,17 @@ export default function CaseSheet() {
               ) : (
                 <p className="text-sm text-muted-foreground italic">No documents uploaded</p>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="vintage-card">
+            <CardHeader>
+              <CardTitle className="text-sm" style={{ fontFamily: "Georgia, serif" }}>Ahara-Vihara</CardTitle>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+              {(["diet", "sleep", "bowelHabits", "dailyRoutine", "substances"] as const).map((field) => (
+                <p key={field}><strong>{field}:</strong> {aharaVihara[field] || "Not provided"}</p>
+              ))}
             </CardContent>
           </Card>
 
@@ -433,7 +477,8 @@ export default function CaseSheet() {
             className="bg-vintage-blue hover:bg-vintage-blue/90"
             onClick={() => {
               // Push patient to doctor queue via the queue service boundary
-              queueService.pushToQueue(store);
+              completeAssessment();
+              queueService.pushToQueue(usePatientStore.getState());
               setVerification({ status: "pending" });
               navigate("/doctor/dashboard");
             }}

@@ -25,8 +25,10 @@ export type AiProviderStatus = "LOCAL" | "GROQ" | "GROQ_FALLBACK";
 let _status: AiProviderStatus = "LOCAL";
 export const getAiProviderStatus = (): AiProviderStatus => _status;
 
-const DEFAULT_MODEL = "llama-3.1-8b-instant";
-const MODEL = DEFAULT_MODEL;
+declare const __GROQ_MODEL__: string | undefined;
+
+const DEFAULT_MODEL = "qwen/qwen3.6-27b";
+const MODEL = typeof __GROQ_MODEL__ !== "undefined" && __GROQ_MODEL__ ? __GROQ_MODEL__ : DEFAULT_MODEL;
 
 const SYSTEM_PROMPT = `You are the language-understanding component of a patient pre-consultation clinical history system called MediKiosk.
 
@@ -271,11 +273,15 @@ export class GroqAiInterviewService implements AiInterviewService {
       console.warn("[GroqAiInterviewService] Groq failed, falling back to local:", err);
       _status = "GROQ_FALLBACK";
 
-      // Fallback: use local planner only
-      const fallbackPlannerResult = this.planner.getNextQuestion(clinicalState);
+      const fallbackResult = await this.fallback.processAnswer(
+        patientAnswer,
+        currentQuestion,
+        clinicalState,
+        { targetField: plannerResult.question?.targetField }
+      );
       return {
-        updatedState: clinicalState,
-        nextQuestion: fallbackPlannerResult.question,
+        updatedState: fallbackResult.updatedState,
+        nextQuestion: fallbackResult.nextQuestion,
         providerStatus: "GROQ_FALLBACK",
       };
     }
@@ -351,6 +357,28 @@ export class GroqAiInterviewService implements AiInterviewService {
       medications: [],
       allergies: [],
       reviewOfSystems: {},
+      ayush: {
+        prakriti: "",
+        vikriti: "",
+        sara: "",
+        samhanana: "",
+        pramana: "",
+        satmya: "",
+        satva: "",
+        aharaShakti: "",
+        vyayamaShakti: "",
+        vaya: "",
+      },
+      aharaVihara: {
+        diet: "",
+        sleep: "",
+        bowelHabits: "",
+        dailyRoutine: "",
+        substances: "",
+      },
+      ayushUnknownFields: [],
+      ayushComplete: false,
+      ayushPhysicianVerified: false,
       patientFacts: [],
       documentFacts: [],
       verifiedFacts: [],

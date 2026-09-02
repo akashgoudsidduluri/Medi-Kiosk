@@ -7,6 +7,23 @@ export function Header() {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  const handleSectionNav = (sectionId: string) => {
+    const scrollToSection = () => {
+      const el = document.getElementById(sectionId);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    };
+
+    if (window.location.pathname === "/") {
+      scrollToSection();
+      return;
+    }
+
+    navigate("/");
+    setTimeout(scrollToSection, 150);
+  };
+
   return (
     <header className="sticky top-0 z-50 bg-parchment/95 backdrop-blur-sm border-b border-border">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -35,10 +52,7 @@ export function Header() {
               variant="ghost"
               size="sm"
               className="text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                const el = document.getElementById("how-it-works");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
+              onClick={() => handleSectionNav("how-it-works")}
             >
               How It Works
             </Button>
@@ -46,10 +60,7 @@ export function Header() {
               variant="ghost"
               size="sm"
               className="text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                const el = document.getElementById("for-patients");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
+              onClick={() => handleSectionNav("for-patients")}
             >
               For Patients
             </Button>
@@ -57,10 +68,7 @@ export function Header() {
               variant="ghost"
               size="sm"
               className="text-sm text-muted-foreground hover:text-foreground"
-              onClick={() => {
-                const el = document.getElementById("for-doctors");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
+              onClick={() => handleSectionNav("for-doctors")}
             >
               For Doctors
             </Button>
@@ -110,8 +118,7 @@ export function Header() {
               className="w-full justify-start text-sm"
               onClick={() => {
                 setMobileMenuOpen(false);
-                const el = document.getElementById("how-it-works");
-                el?.scrollIntoView({ behavior: "smooth" });
+                handleSectionNav("how-it-works");
               }}
             >
               How It Works
@@ -121,8 +128,7 @@ export function Header() {
               className="w-full justify-start text-sm"
               onClick={() => {
                 setMobileMenuOpen(false);
-                const el = document.getElementById("for-patients");
-                el?.scrollIntoView({ behavior: "smooth" });
+                handleSectionNav("for-patients");
               }}
             >
               For Patients
@@ -132,8 +138,7 @@ export function Header() {
               className="w-full justify-start text-sm"
               onClick={() => {
                 setMobileMenuOpen(false);
-                const el = document.getElementById("for-doctors");
-                el?.scrollIntoView({ behavior: "smooth" });
+                handleSectionNav("for-doctors");
               }}
             >
               For Doctors

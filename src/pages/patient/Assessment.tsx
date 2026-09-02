@@ -3,6 +3,7 @@ import { useNavigate } from "react-router";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
@@ -19,13 +20,25 @@ import {
 
 export default function Assessment() {
   const navigate = useNavigate();
-  const { ayush, setAYUSH, setStep } = usePatientStore();
+  const { ayush, setAYUSH, aharaVihara, setAharaVihara, language, setStep } = usePatientStore();
   const parameters = ayushService.getParameterOptions();
   const [expandedParam, setExpandedParam] = useState<string | null>(
     parameters.find((p) => !ayush[p.id as keyof typeof ayush])?.id || null
   );
+  const [showAhara, setShowAhara] = useState(false);
 
   const validation = useMemo(() => ayushService.validateAssessment(ayush), [ayush]);
+  const aharaFields = ["diet", "sleep", "bowelHabits", "dailyRoutine", "substances"] as const;
+  const aharaComplete = aharaFields.every((field) => Boolean(aharaVihara[field]?.trim()));
+
+  const localizedOptionLabel = (label: string) => {
+    if (language === "English") return label;
+    const dictionary = language === "Telugu"
+      ? { Air: "గాలి", Space: "ఆకాశం", Fire: "అగ్ని", Water: "నీరు", Earth: "భూమి", Dual: "ద్వంద్వ", Balanced: "సమతుల్య", Predominant: "ప్రధాన", Imbalance: "అసమతుల్యత", Reduced: "తగ్గిన", Medium: "మధ్యస్థ", Strong: "బలమైన", Small: "చిన్న", Large: "పెద్ద", Full: "పూర్తి", Poor: "తక్కువ", Partial: "పాక్షిక", Dense: "దృఢమైన", Fine: "సూక్ష్మ", Lax: "వదులైన" }
+      : { Air: "वायु", Space: "आकाश", Fire: "अग्नि", Water: "जल", Earth: "पृथ्वी", Dual: "द्वि", Balanced: "संतुलित", Predominant: "प्रमुख", Imbalance: "असंतुलन", Reduced: "कम", Medium: "मध्यम", Strong: "मज़बूत", Small: "छोटा", Large: "बड़ा", Full: "पूर्ण", Poor: "कम", Partial: "आंशिक", Dense: "घना", Fine: "सूक्ष्म", Lax: "ढीला" };
+    const translated = Object.entries(dictionary).reduce((value, [english, regional]) => value.replace(new RegExp(`\\b${english}\\b`, "g"), regional), label);
+    return `${label} (${translated})`;
+  };
 
   const handleSelect = (paramId: string, value: string) => {
     setAYUSH({ [paramId]: value });
@@ -148,9 +161,18 @@ export default function Assessment() {
                           <div>
                             <CardTitle className="text-sm" style={{ fontFamily: "Georgia, serif" }}>
                               {param.name}
-                              <span className="text-muted-foreground ml-2 text-xs font-normal">
-                                {param.sanskrit}
-                              </span>
+                              {language !== "English" && <span className="text-muted-foreground ml-2 text-xs font-normal">
+                                {param.id === "prakriti" ? (language === "Telugu" ? "ప్రకృతి" : "प्रकृति") :
+                                  param.id === "vikriti" ? (language === "Telugu" ? "వికృతి" : "विकृति") :
+                                  param.id === "sara" ? (language === "Telugu" ? "సారం" : "सार") :
+                                  param.id === "samhanana" ? (language === "Telugu" ? "సంహననం" : "संहनन") :
+                                  param.id === "pramana" ? (language === "Telugu" ? "ప్రమాణం" : "प्रमाण") :
+                                  param.id === "satmya" ? (language === "Telugu" ? "సాత్మ్యం" : "सात्म्य") :
+                                  param.id === "satva" ? (language === "Telugu" ? "సత్త్వం" : "सत्त्व") :
+                                  param.id === "aharaShakti" ? (language === "Telugu" ? "ఆహార శక్తి" : "आहार शक्ति") :
+                                  param.id === "vyayamaShakti" ? (language === "Telugu" ? "వ్యాయామ శక్తి" : "व्यायाम शक्ति") :
+                                  (language === "Telugu" ? "వయస్సు" : "वय")}
+                              </span>}
                             </CardTitle>
                             <p className="text-[10px] text-muted-foreground">
                               {param.description}
@@ -188,7 +210,7 @@ export default function Assessment() {
                                 {value === option.value && (
                                   <Check className="w-4 h-4 text-vintage-gold flex-shrink-0" />
                                 )}
-                                <span>{option.label}</span>
+                                <span>{localizedOptionLabel(option.label)}</span>
                               </div>
                             </button>
                           ))}
@@ -201,6 +223,29 @@ export default function Assessment() {
             );
           })}
         </div>
+
+        {showAhara && (
+          <Card className="vintage-card mt-6">
+            <CardHeader>
+              <CardTitle className="text-sm">Ahara-Vihara {language === "Telugu" ? "ఆహార-విహార" : language === "Hindi" ? "आहार-विहार" : ""}</CardTitle>
+              <p className="text-xs text-muted-foreground">
+                {language === "Telugu" ? "మీ ఆహారం మరియు రోజువారీ అలవాట్లను నమోదు చేయండి." : language === "Hindi" ? "अपने भोजन और दैनिक आदतों के बारे में बताइए।" : "Record your diet and daily habits."}
+              </p>
+            </CardHeader>
+            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {aharaFields.map((field) => {
+                const labels = {
+                  diet: { English: "Diet / Ahara", Hindi: "आहार", Telugu: "ఆహారం" },
+                  sleep: { English: "Sleep", Hindi: "नींद", Telugu: "నిద్ర" },
+                  bowelHabits: { English: "Bowel habits", Hindi: "मल त्याग की आदतें", Telugu: "మల విసర్జన అలవాట్లు" },
+                  dailyRoutine: { English: "Daily routine", Hindi: "दैनिक दिनचर्या", Telugu: "రోజువారీ దినచర్య" },
+                  substances: { English: "Substances / lifestyle", Hindi: "नशीले पदार्थ / जीवनशैली", Telugu: "పదార్థాలు / జీవనశైలి" },
+                };
+                return <label key={field} className="text-xs font-medium text-foreground">{labels[field][language as "English" | "Hindi" | "Telugu"] || labels[field].English}<Input className="mt-1" value={aharaVihara[field] || ""} onChange={(e) => setAharaVihara({ [field]: e.target.value })} /></label>;
+              })}
+            </CardContent>
+          </Card>
+        )}
 
         {/* Safety Note */}
         <div className="mt-6">
@@ -222,13 +267,17 @@ export default function Assessment() {
 
           <Button
             className="bg-vintage-blue hover:bg-vintage-blue/90"
-            disabled={!validation.isComplete}
+            disabled={!validation.isComplete || (showAhara && !aharaComplete)}
             onClick={() => {
+              if (!showAhara) {
+                setShowAhara(true);
+                return;
+              }
               setStep("documents");
               navigate("/patient/document");
             }}
           >
-            Continue to Documents
+            {!showAhara ? (language === "Telugu" ? "ఆహార-విహారానికి కొనసాగండి" : language === "Hindi" ? "आहार-विहार पर जाएँ" : "Continue to Ahara-Vihara") : (language === "Telugu" ? "పత్రాలకు కొనసాగండి" : language === "Hindi" ? "दस्तावेज़ों पर जाएँ" : "Continue to Documents")}
             <ArrowRight className="ml-2 w-4 h-4" />
           </Button>
         </div>

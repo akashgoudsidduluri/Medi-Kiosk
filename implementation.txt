@@ -1,1702 +1,398 @@
-IMPLEMENTATION TASK
-===================
+Use this prompt with your AI coding agent:
 
-Project: MediKiosk
-Feature: Real AI Clinical Interview Engine using Groq
-Phase: AI Clinical Intelligence Integration
+```text
+Continue the MediKiosk AI work from the CURRENT codebase. Do not redesign the architecture and do not touch the Document/OCR subsystem being developed separately.
 
-IMPORTANT:
-Do not treat this as a simple "connect Groq API" task.
+The current foundation already exists:
+- ClinicalState
+- QuestionPlanner
+- complaint-specific question plans
+- LocalAiInterviewService
+- GroqAiInterviewService
+- answer extraction
+- interview i18n
+- ASR/TTS abstractions
+- AYUSH fields in ClinicalState
 
-The goal is to build a proper adaptive clinical history-taking engine where Groq helps understand patient answers and generate structured information, while our application controls the clinical workflow, question planning, safety rules, and final case structure.
-
-Existing implementation status:
-
-DONE:
-- Phase 1.1 — Centralized Types
-- Phase 1.2 — Zustand State Management
-- Phase 1.3 — Service Interfaces + Service Registry
-- Phase 2 — Consent + Language + Input Mode
-- Phase 3 — Browser ASR + TTS
-
-The existing project already contains:
-- React + TypeScript + Vite
-- Zustand
-- Patient store
-- Doctor store
-- AI service abstraction
-- Local AI implementation
-- ASR service abstraction
-- TTS service abstraction
-- OCR service abstraction
-- Triage service
-- CaseSheet service
-- FHIR service
-- ABDM service
-- Service registry
-- demo / hybrid / production app modes
-
-DO NOT rebuild the architecture from scratch.
-
-First inspect the existing implementation and integrate into it.
-
+Your job is to finish EVERYTHING still missing in the AI/Interview + AYUSH portion.
 
 ==================================================
-1. PRIMARY GOAL
+1. FINISH THE ACTUAL INTERVIEW UI
 ==================================================
 
-Build this pipeline:
+Inspect the existing Interview page and connect it properly to the existing AI services.
 
-PATIENT ANSWER
-      ↓
-ASR / Touch Input
-      ↓
-AI SERVICE
-      ↓
-ANSWER UNDERSTANDING + EXTRACTION
-      ↓
-STRUCTURED CLINICAL STATE
-      ↓
-COMPLETENESS CHECK
-      ↓
-QUESTION PLANNER
-      ↓
-NEXT QUESTION
-      ↓
-TTS / UI
-      ↓
-PATIENT ANSWER
+The UI must NOT use a fixed hardcoded SOCRATES sequence.
 
-At the same time:
+Flow:
 
-STRUCTURED CLINICAL STATE
-      ↓
-DETERMINISTIC TRIAGE RULES
-      ↓
-RED FLAGS / PRIORITY
+Patient selects complaint
+→ AI asks one question
+→ patient answers by voice/touch/text
+→ answer is processed
+→ ClinicalState is updated
+→ QuestionPlanner determines next question
+→ next question is shown
 
+The QuestionPlanner must remain the authoritative controller.
 
-IMPORTANT ARCHITECTURAL RULE:
+Support at minimum:
+- chest pain
+- abdominal pain
+- headache
+- fever
+- cough/breathlessness
+- general complaint
 
-Groq must NOT independently control the entire medical interview.
+The UI must correctly handle:
+- normal answers
+- answers containing multiple facts
+- "I don't know"
+- "not sure"
+- contradictions
+- already-known information
+- document-known information when available
+- interview completion
 
-Groq is the language understanding/reasoning component.
-
-Our application remains responsible for:
-- clinical structure
-- question sequencing
-- mandatory information
-- complaint-specific branches
-- completeness
-- safety rules
-- triage
-- validation
-- clinician verification
-
+Do not ask questions for information that has already been resolved unless confirmation is clinically appropriate.
 
 ==================================================
-2. SECURITY — VERY IMPORTANT
+2. ANSWER → CLINICALSTATE
 ==================================================
 
-I already have a Groq API key.
-
-NEVER hardcode the API key.
-
-NEVER put the real API key into source code.
-
-NEVER commit the API key to GitHub.
-
-NEVER expose the secret through a VITE_ environment variable.
-
-Do NOT create:
-
-VITE_GROQ_API_KEY=...
-
-because Vite variables are exposed to the browser.
-
-Preferred architecture:
-
-React frontend
-      ↓
-Backend/API proxy
-      ↓
-Groq API
-
-Keep:
-
-GROQ_API_KEY=...
-
-server-side only.
-
-If this project is currently frontend-only, inspect the existing project structure and implement the smallest appropriate backend/server endpoint for development.
-
-Do not introduce a huge backend framework unnecessarily.
-
-If the current development environment makes a secure server-side proxy impossible, STOP and explain the exact limitation before implementing an insecure browser-side secret.
-
-Add/update:
-
-.env.example
-
-with:
-
-GROQ_API_KEY=your_groq_api_key_here
-
-Do not place the actual key in .env.example.
-
-Also make sure .env and other secret files are ignored by Git.
-
-Verify that no API key appears in:
-- source code
-- logs
-- UI
-- Git-tracked files
-
-
-==================================================
-3. GROQ MODEL
-==================================================
-
-Use a currently available Groq model suitable for structured reasoning and fast responses.
-
-Do not blindly hardcode an obsolete model name.
-
-Make the model configurable through an environment variable, for example:
-
-GROQ_MODEL=...
-
-Use the configured model.
-
-The application should remain provider-independent through the existing AI service interface.
-
-
-==================================================
-4. EXISTING AI SERVICE ARCHITECTURE
-==================================================
-
-Inspect the existing AI interface and registry first.
-
-Do not create a parallel AI architecture.
-
-Integrate:
-
-LocalAiInterviewService
-GroqAiInterviewService
-AI Service Registry
-
-Desired behavior:
-
-APP_MODE=demo
-    ↓
-Local AI only
-
-APP_MODE=hybrid
-    ↓
-Groq AI if configured
-    ↓
-Local AI fallback if Groq unavailable
-
-APP_MODE=production
-    ↓
-Configured production AI provider
-    ↓
-Safe fallback behavior where appropriate
-
-
-The existing Local AI service MUST remain functional.
-
-
-==================================================
-5. CREATE / COMPLETE CLINICAL STATE
-==================================================
-
-Create or improve a centralized ClinicalState type.
-
-Do not scatter medical fields across components.
-
-At minimum support:
-
-type ClinicalState = {
-  chiefComplaint?: string;
-
-  site?: string;
-  onset?: string;
-  duration?: string;
-  character?: string;
-  radiation?: string;
-
-  severity?: number | null;
-
-  associatedSymptoms: string[];
-
-  timing?: string;
-  aggravatingFactors?: string;
-  relievingFactors?: string;
-
-  pastMedicalHistory?: string[];
-  medications?: string[];
-  allergies?: string[];
-
-  familyHistory?: string;
-  personalHistory?: string;
-
-  reviewOfSystems?: Record<string, string>;
-
-  ayushAssessment?: {
-    prakriti?: string;
-    vikriti?: string;
-    sara?: string;
-    samhanana?: string;
-    pramana?: string;
-    satva?: string;
-    aharaShakti?: string;
-    vyayamaShakti?: string;
-    vaya?: string;
-  };
-
-  unknownFields: string[];
-
-  contradictions: ClinicalContradiction[];
-};
-
-
-Use the existing project types if equivalent types already exist.
-
-Do not create duplicate types.
-
-
-==================================================
-6. STRUCTURED AI RESPONSE
-==================================================
-
-Groq MUST return structured JSON.
-
-Do NOT rely on free-form prose.
-
-Define a strict schema/interface.
-
-Example:
-
-{
-  "extracted": {
-    "chiefComplaint": null,
-    "site": null,
-    "onset": null,
-    "duration": null,
-    "character": null,
-    "radiation": null,
-    "severity": null,
-    "associatedSymptoms": [],
-    "timing": null,
-    "aggravatingFactors": null,
-    "relievingFactors": null,
-    "pastMedicalHistory": [],
-    "medications": [],
-    "allergies": []
-  },
-
-  "missingFields": [],
-
-  "nextQuestion": {
-    "id": "",
-    "text": "",
-    "field": "",
-    "type": "text"
-  },
-
-  "confidence": 0,
-
-  "possibleContradictions": []
-}
-
-
-The actual schema may be improved if needed, but it MUST remain strongly typed and validated.
-
-
-==================================================
-7. EXTRACTION RULES
-==================================================
-
-The AI must follow these rules:
-
-RULE 1:
-Extract ONLY information explicitly provided by the patient.
-
-RULE 2:
-Never invent information.
-
-RULE 3:
-Never infer a diagnosis from an answer.
-
-RULE 4:
-Never fabricate a medication.
-
-RULE 5:
-Never fabricate a symptom.
-
-RULE 6:
-Never fabricate a date or duration.
-
-RULE 7:
-If the patient does not know something, represent it as unknown/null.
-
-RULE 8:
-Preserve the patient's meaning.
-
-RULE 9:
-Do not convert uncertainty into certainty.
+Verify that every patient answer actually updates the central ClinicalState.
+
+Use the existing:
+- answerExtraction
+- applyExtractedFields
+- markUnknown
+- ClinicalFact
+
+Do NOT create another state object for interview data.
+
+Every patient-derived fact must contain:
+- source: PATIENT
+- field
+- value
+- confidence
+- verified: false
+- timestamp
+
+Multiple facts from a single answer must be stored separately when appropriate.
 
 Example:
 
 Patient:
-"I think the pain started yesterday."
+"I have chest pain for 3 days, it is burning and gets worse after meals."
 
-Do NOT produce:
+Should be able to update multiple relevant fields rather than storing the entire sentence in one field.
 
-"onset: yesterday"
-
-Instead preserve uncertainty appropriately.
-
-Example:
-
-Patient:
-"I don't know when it started."
-
-Result:
-
-onset = null
-
-unknownFields includes onset.
-
+Do not fabricate information that the patient did not provide.
 
 ==================================================
-8. ONE QUESTION AT A TIME
+3. LANGUAGE
 ==================================================
 
-The interview must ask ONE question at a time.
+The language selected earlier in the patient journey is authoritative.
 
-Never generate:
+Patient-facing AI questions must be displayed in the selected language.
 
-"Where is the pain, when did it start, how severe is it and does it spread?"
+At minimum verify:
+- English
+- Hindi
+- Telugu
 
-Instead ask:
+Internal field names/state keys can remain English.
 
-"Where exactly do you feel the pain?"
+Do not randomly switch languages.
 
-Then after the answer:
+Check every path:
+- first question
+- follow-up questions
+- completion message
+- document-related hints
+- error/fallback messages
+- AYUSH questions
 
-"When did the pain start?"
-
-Then:
-
-"How severe is the pain from 0 to 10?"
-
-Then:
-
-"Does the pain spread anywhere else?"
-
-
-This is essential for:
-- voice interaction
-- elderly users
-- accessibility
-- clean structured extraction
-
+If Groq is unavailable, Local AI must still produce questions in the selected language.
 
 ==================================================
-9. ADAPTIVE QUESTIONING
+4. SPEAKER / TTS
 ==================================================
 
-The AI must NOT simply ask the same fixed questions to every patient.
+The interview UI must have a clearly visible speaker button near the current AI question, preferably at the top of the chat/question area.
 
-Implement complaint-aware questioning.
+Behavior:
 
-At minimum support:
+Speaker clicked
+→ speak CURRENT question
 
-1. Chest pain
-2. Abdominal pain
-3. Headache
-4. Fever
-5. Cough / breathlessness
-6. General complaint
+Speaker clicked again/replay
+→ replay CURRENT question
 
+Replay MUST NOT:
+- send another Groq request
+- create another question
+- modify ClinicalState
 
-Example:
+Use the existing TTS service abstraction.
 
-CHEST PAIN:
+Browser speech synthesis can remain the prototype implementation.
 
-Chief complaint
-↓
-Location
-↓
-Onset
-↓
-Character
-↓
-Severity
-↓
-Radiation
-↓
-Associated symptoms
-↓
-Aggravating factors
-↓
-Relieving factors
-↓
-Relevant medical history
-↓
-Medication
-↓
-Allergy
-↓
-Complete
+Keep the architecture ready for future Bhashini TTS integration.
 
-
-ABDOMINAL PAIN:
-
-Chief complaint
-↓
-Location
-↓
-Onset
-↓
-Duration
-↓
-Character
-↓
-Severity
-↓
-Radiation
-↓
-Vomiting
-↓
-Bowel changes
-↓
-Fever
-↓
-Food relationship
-↓
-Urinary symptoms
-↓
-Past history
-↓
-Medication
-↓
-Complete
-
-
-HEADACHE:
-
-Chief complaint
-↓
-Location
-↓
-Onset
-↓
-Duration
-↓
-Severity
-↓
-Character
-↓
-Sudden/gradual onset
-↓
-Vision changes
-↓
-Vomiting
-↓
-Fever
-↓
-Neurological symptoms
-↓
-Relevant history
-↓
-Medication
-↓
-Complete
-
-
-FEVER:
-
-Chief complaint
-↓
-Onset
-↓
-Duration
-↓
-Highest known temperature
-↓
-Chills
-↓
-Sweating
-↓
-Cough
-↓
-Breathing difficulty
-↓
-Body pain
-↓
-Rash
-↓
-Exposure/travel if relevant
-↓
-Medication
-↓
-Complete
-
-
-COUGH / BREATHLESSNESS:
-
-Chief complaint
-↓
-Onset
-↓
-Duration
-↓
-Severity
-↓
-Dry/productive
-↓
-Sputum
-↓
-Blood
-↓
-Chest pain
-↓
-Breathing difficulty
-↓
-Fever
-↓
-Relevant history
-↓
-Medication
-↓
-Complete
-
-
-GENERAL:
-
-Use a more general clinical history path.
-
-
-Do NOT ask irrelevant questions just to fill a fixed questionnaire.
-
+Also verify voice input through the existing ASR abstraction and ensure touch/text input remains available as a fallback.
 
 ==================================================
-10. QUESTION PLANNER
+5. GROQ + LOCAL FALLBACK
 ==================================================
 
-Create or improve:
+Groq should improve natural-language understanding, but it must NOT be required for the application to function.
 
-QuestionPlanner
+Required behavior:
 
-Its job is to determine what information is still required.
+Groq available:
+→ use Groq where appropriate
+→ validate its suggested field/question against QuestionPlanner
 
-The basic logic should be:
+Groq unavailable/error/invalid response:
+→ automatically use LocalAiInterviewService
 
-Patient answer
-↓
-Update ClinicalState
-↓
-Determine complaint
-↓
-Determine current section
-↓
-Check required fields
-↓
-Select next relevant question
-↓
-Return question
+Never expose GROQ_API_KEY in client-side code.
 
+Do NOT use VITE_GROQ_API_KEY.
 
-Example:
+Do not allow Groq to invent arbitrary clinical questions outside the planner's allowed fields.
 
-ClinicalState:
-
-chiefComplaint = chest pain
-site = known
-onset = known
-character = known
-severity = unknown
-
-Planner:
-
-next question = severity
-
-
-If:
-
-severity = known
-radiation = unknown
-
-Planner:
-
-next question = radiation
-
-
-If enough information has been collected:
-
-stop asking questions
-
-and move to:
-
-Review → Case Sheet → Doctor
-
-
-The AI should not keep asking questions indefinitely.
-
+Test the fallback deliberately.
 
 ==================================================
-11. COMPLETENESS SCORING
+6. AYUSH ASSESSMENT — THIS IS THE BIGGEST REMAINING FEATURE
 ==================================================
 
-Implement a clinical completeness mechanism.
+Make the existing AYUSH Assessment page genuinely functional.
 
-For example:
+It must NOT be a decorative Sanskrit option picker.
 
-required fields for chest pain:
-
-chiefComplaint
-site
-onset
-character
-severity
-radiation
-associatedSymptoms
-aggravatingFactors
-relievingFactors
-
-Calculate something like:
-
-completed required fields / total required fields
-
-Example:
-
-7 / 9 = 78%
-
-The exact algorithm can be improved.
-
-Expose completeness to the UI if useful.
-
-Do not display a fake 100% score.
-
-Unknown fields should remain unknown.
-
-
-==================================================
-12. AI + QUESTION PLANNER RESPONSIBILITY
-==================================================
-
-Use this architecture:
-
-              ┌─────────────────────┐
-Patient text →│ Groq AI             │
-              │ Understand/extract  │
-              └──────────┬──────────┘
-                         ↓
-                  ClinicalState
-                         ↓
-              ┌─────────────────────┐
-              │ Question Planner    │
-              │                     │
-              │ Missing information│
-              │ Complaint branch    │
-              └──────────┬──────────┘
-                         ↓
-                   Next Question
-
-
-Do NOT ask Groq to independently invent the entire interview.
-
-The planner must constrain the interview.
-
-Groq provides language understanding.
-
-The planner provides clinical structure.
-
-
-==================================================
-13. CONTRADICTION DETECTION
-==================================================
-
-Implement basic contradiction detection.
-
-Example:
-
-Earlier:
-"I don't have diabetes."
-
-Later:
-"I take insulin every day."
-
-Result:
-
-{
-  "possibleContradictions": [
-    {
-      "field": "diabetes",
-      "previous": "No diabetes",
-      "new": "Takes insulin",
-      "message": "Potential inconsistency requiring clinician review"
-    }
-  ]
-}
-
-
-IMPORTANT:
-
-Do NOT automatically resolve the contradiction.
-
-Do NOT decide which answer is correct.
-
-Mark it for clinician review.
-
-
-==================================================
-14. RED FLAG / TRIAGE SAFETY
-==================================================
-
-This is extremely important.
-
-Do NOT allow Groq to make the final triage decision.
-
-The existing deterministic triage service must remain responsible.
-
-Flow:
-
-Groq extracts:
-
-chest pain
-+
-breathlessness
-+
-sudden onset
-
-↓
-
-ClinicalState
-
-↓
-
-Deterministic Triage Rules
-
-↓
-
-High Priority
-
-
-The LLM may help extract information.
-
-The deterministic rules decide the actual priority.
-
-
-At minimum verify rules for obvious high-risk combinations already supported by the project.
-
-Do not create unsupported medical claims.
-
-Do not present triage as diagnosis.
-
-UI wording should use:
-
-"Priority / Red Flag"
-
-not:
-
-"Diagnosis"
-
-
-==================================================
-15. AI SYSTEM PROMPT
-==================================================
-
-Create a carefully constrained system prompt for Groq.
-
-It should communicate:
-
-"You are the language-understanding component of a patient pre-consultation clinical history system.
-
-Your job is to:
-1. Understand what the patient explicitly said.
-2. Extract structured clinical information.
-3. Identify missing information.
-4. Help select the next relevant question within the supplied clinical workflow.
-5. Identify possible contradictions.
-
-You are NOT a doctor.
-You must NOT diagnose.
-You must NOT prescribe.
-You must NOT invent patient information.
-You must not turn uncertain information into facts.
-You must ask one question at a time.
-You must follow the supplied clinical question plan.
-You must return valid structured JSON only."
-
-
-Pass the current context separately:
-
-- current ClinicalState
-- patient's latest answer
-- current complaint
-- current question
-- allowed question fields
-- missing fields
-- relevant complaint branch
-
-
-Do NOT dump unnecessary patient data into every request.
-
-
-==================================================
-16. PREVENT PROMPT DRIFT
-==================================================
-
-The model must not be allowed to override application rules.
-
-For example, if the application says:
-
-allowed next fields:
-
-[
-  "severity",
-  "radiation"
-]
-
-the model must not suddenly ask about unrelated diseases.
-
-The Question Planner remains authoritative.
-
-
-==================================================
-17. JSON VALIDATION
-==================================================
-
-Every Groq response must pass validation.
-
-Handle:
-
-- invalid JSON
-- malformed JSON
-- missing fields
-- incorrect types
-- invalid question type
-- hallucinated fields
-- empty response
-- API errors
-- timeout
-- rate limit
-- unavailable API
-
-
-If validation fails:
-
-Groq
- ↓
-INVALID
- ↓
-LocalAiInterviewService
-
-
-The application must never crash because the LLM returned bad data.
-
-
-==================================================
-18. FALLBACK
-==================================================
-
-Implement:
-
-Groq success:
-
-Groq → validated response → ClinicalState → planner
-
-
-Groq failure:
-
-Groq → error
-       ↓
-Local AI
-       ↓
-continue interview
-
-
-The patient should NOT see:
-
-"Groq API error"
-
-Instead use a user-friendly experience.
-
-Optionally log a developer-only status.
-
-
-==================================================
-19. AI PROVIDER STATUS
-==================================================
-
-Add a small developer/demo status indicator.
-
-Possible values:
-
-LOCAL
-GROQ
-GROQ → LOCAL FALLBACK
-
-
-Do not expose:
-- API key
-- request headers
-- secret configuration
-
-
-This helps demonstrate to judges that the architecture supports both local fallback and real AI.
-
-
-==================================================
-20. ASR INTEGRATION
-==================================================
-
-The existing browser ASR must remain.
-
-Flow:
-
-Patient speaks
-↓
-Browser ASR
-↓
-Transcript
-↓
-Groq AI
-↓
-Structured extraction
-↓
-Question Planner
-↓
-Next question
-↓
-Browser TTS
-
-
-The transcript should remain visible/editable where appropriate.
-
-If ASR confidence is poor or speech recognition fails:
-
-allow:
-- retry
-- repeat question
-- touch input
-
-
-Do not make voice the only way to answer.
-
-
-==================================================
-21. TTS INTEGRATION
-==================================================
-
-The existing BrowserTtsService should speak the generated next question.
-
-The AI should generate patient-friendly questions.
-
-Do not use technical clinical language where unnecessary.
-
-Bad:
-
-"Please characterize the temporal profile and radiation of your thoracic pain."
-
-Good:
-
-"When did the pain start?"
-
-"Does the pain spread anywhere else?"
-
-
-==================================================
-22. AYUSH SUPPORT
-==================================================
-
-Do not remove the AYUSH flow.
-
-The official problem requires AYUSH-oriented history collection including Dashavidha Pariksha.
-
-The architecture should support the 10 parameters:
+Implement all 10 Dashavidha parameters required by the SIH problem statement:
 
 1. Prakriti
 2. Vikriti
 3. Sara
 4. Samhanana
 5. Pramana
-6. Satva
-7. Ahara Shakti
-8. Vyayama Shakti
-9. Vaya
+6. Satmya
+7. Sattva
+8. Ahara Shakti
+9. Vyayama Shakti
+10. Vaya
 
-IMPORTANT:
+Also collect:
+- Ahara-Vihara
 
-Check the existing project terminology and types before modifying them.
+For Ahara-Vihara at minimum support:
+- diet/food habits
+- sleep
+- bowel habits
+- daily routine
+- relevant substance/habit information
 
-Do not duplicate or incorrectly rename existing AYUSH fields.
+Questions/options must be understandable to an ordinary patient.
 
-The AI should help understand natural-language answers, but the application should still control the AYUSH question structure.
+Do not merely display Sanskrit terminology.
 
-Example:
+For example, the UI can show:
 
-AI:
-"Do you usually feel comfortable in cold weather, or do you prefer warmth?"
+"How would you describe your usual body constitution?"
 
-The answer can be mapped to the appropriate AYUSH assessment field.
+and internally store the structured field as:
 
-Do not make unsupported medical conclusions from the answer.
+prakriti
 
+Use the existing:
+ClinicalState.ayush
+ClinicalState.aharaVihara
+ClinicalState.ayushUnknownFields
+ClinicalState.ayushComplete
+ClinicalState.ayushPhysicianVerified
 
-==================================================
-23. DOCUMENT/OCR CONTEXT
-==================================================
-
-The AI architecture should eventually be able to consume structured OCR results.
-
-Do NOT implement a huge document-AI system in this task.
-
-Just make sure the ClinicalState / case-sheet architecture can accept relevant extracted information from documents later.
-
-Never treat OCR text as automatically verified medical truth.
-
-
-==================================================
-24. CASE SUMMARY
-==================================================
-
-The AI/service layer should support generating a structured physician-ready summary.
-
-Example:
-
-PATIENT
-Name / demographic information
-
-CHIEF COMPLAINT
-Chest pain
-
-HISTORY OF PRESENT ILLNESS
-Started this morning
-Pressure-like
-Severity 8/10
-...
-
-ASSOCIATED SYMPTOMS
-...
-
-MEDICATIONS
-...
-
-ALLERGIES
-...
-
-RED FLAGS
-...
-
-MISSING / UNCERTAIN INFORMATION
-...
-
-CONTRADICTIONS
-...
-
-IMPORTANT:
-
-The summary is a DRAFT.
-
-Doctor must be able to:
-- edit
-- verify
-- reject
-- override
-
-
-Never present the AI summary as the final medical record without clinician verification.
-
+Do not create a second AYUSH state system.
 
 ==================================================
-25. DOCTOR WORKFLOW
+7. AYUSH MUST BE PATIENT INPUT, NOT AI INVENTION
 ==================================================
 
-Verify that the resulting case data can flow into the existing doctor dashboard.
+Do NOT have Groq invent Prakriti, Vikriti, etc.
 
-Expected:
+The application should guide the patient through the assessment and record their responses.
 
-Patient
- ↓
-AI interview
- ↓
-Structured Case Sheet
- ↓
-Triage
- ↓
-Doctor Queue
- ↓
-Doctor opens patient
- ↓
-Doctor verifies/edits
- ↓
-FHIR bundle
- ↓
-ABDM adapter
+If a value cannot be established:
+- allow "I don't know"
+- add the field to ayushUnknownFields
+- do not invent a value
 
+Every collected AYUSH value should have appropriate provenance where the architecture supports it.
 
-Do not bypass the doctor verification stage.
-
+The UI must make it obvious that these are patient-entered/assessment values requiring physician verification.
 
 ==================================================
-26. FHIR / ABDM
+8. AYUSH COMPLETION + PHYSICIAN VERIFICATION
 ==================================================
 
-Do not modify the existing FHIR/ABDM architecture unnecessarily.
+Implement real completion logic.
 
-The AI should produce structured clinical data that the existing CaseSheet/FHIR service can consume.
+AYUSH should become complete only when:
+- all required assessment fields have either a value OR are explicitly marked unknown
+- Ahara-Vihara required information is handled
 
-Do NOT claim actual ABDM integration unless a real ABDM connection exists.
+Do not mark it complete simply because the page was opened.
 
-For the prototype:
+Add/complete physician verification behavior using:
+ayushPhysicianVerified
 
-FHIR = local/generated representation
+The doctor should be able to review/edit/verify AYUSH information.
 
-ABDM = integration-ready adapter/demo
-
-Use the existing implementation.
-
-
-==================================================
-27. PATIENT EXPERIENCE
-==================================================
-
-The interview should feel conversational.
-
-Example:
-
-AI:
-"What brings you to the hospital today?"
-
-Patient:
-"I've had chest pain since morning."
-
-AI extracts:
-chiefComplaint = chest pain
-onset = morning
-
-AI:
-"Where exactly do you feel the pain?"
-
-Patient:
-"In the center of my chest."
-
-AI extracts:
-site = center of chest
-
-AI:
-"How would you describe the pain?"
-
-Patient:
-"Like someone is pressing on my chest."
-
-AI extracts:
-character = pressure
-
-AI:
-"On a scale from 0 to 10, how severe is it?"
-
-Patient:
-"8."
-
-AI extracts:
-severity = 8
-
-
-Do NOT display internal JSON to normal patients.
-
+Do not claim the physician verified something when they have not.
 
 ==================================================
-28. DO NOT OVER-QUESTION
+9. DOCUMENT-AWARE INTERVIEW COMPATIBILITY
 ==================================================
 
-The system must recognize when enough information has been collected.
+Do NOT implement the Document/OCR subsystem now.
 
-Do NOT create an interview with 50 mandatory questions.
+However, ensure the AI architecture correctly consumes existing documentFacts if they are already present.
 
-The system should be adaptive.
+If an unverified document fact exists:
+- the planner may use it as context
+- the patient can confirm/correct it
+- the source must remain DOCUMENT
+- patient confirmation must remain distinguishable as PATIENT
 
-If a field is already clearly answered, do not ask it again.
-
-Example:
-
-Patient:
-"I have had severe stomach pain in the lower right side since yesterday."
-
-This already contains:
-
-chiefComplaint
-severity
-site
-onset
-
-Do not ask those fields again.
-
+Never overwrite doctor-verified facts.
 
 ==================================================
-29. UNKNOWN ANSWERS
+10. SAFETY
 ==================================================
 
-Patients may answer:
+This is a clinical intake system, NOT an autonomous diagnosis system.
 
-"I don't know."
+Do NOT add:
+- autonomous diagnosis
+- prescription generation
+- treatment recommendations presented as medical decisions
+- fabricated clinical findings
 
-"Not sure."
+The AI is only collecting/structuring history.
 
-"I can't remember."
+Triage remains deterministic/rule-based.
 
-"No idea."
-
-"I haven't noticed."
-
-The system must accept this.
-
-Store:
-
-unknown / null
-
-and move forward when appropriate.
-
-Do not repeatedly ask the same question.
-
+Contradictory patient information must be preserved rather than silently overwritten.
 
 ==================================================
-30. LANGUAGE
+11. TESTS
 ==================================================
 
-Respect the language selected in the existing Language page.
+Before declaring this complete, add/run tests for:
 
-The question planner's semantic field names remain English internally.
+INTERVIEW:
+- chest pain branch
+- abdominal pain branch
+- headache branch
+- fever branch
+- cough/breathlessness branch
+- general branch
+- multi-fact answer
+- unknown answer
+- contradiction
+- already-known field
+- completion condition
+- ClinicalState update
 
-Patient-facing question text should be generated/displayed in the selected language when supported.
+LANGUAGE:
+- English
+- Hindi
+- Telugu
+- Local AI language fallback
 
-Do not break the current language selection flow.
+VOICE:
+- speaker button
+- TTS current question
+- replay
+- replay does not call Groq
+- ASR fallback/touch input
 
-If Groq cannot reliably produce the selected language:
+GROQ:
+- successful Groq response
+- malformed response
+- Groq unavailable
+- Local fallback
 
-use the existing fallback/local behavior.
+AYUSH:
+- all 10 Dashavidha parameters
+- Ahara-Vihara
+- unknown AYUSH field
+- completion logic
+- physician verification
+- no invented values
 
-Do not claim support for a specific number of Indian languages unless the implementation actually supports them.
-
+DOCUMENT COMPATIBILITY:
+- document fact visible as DOCUMENT provenance
+- patient confirmation remains PATIENT
+- doctor-verified fact is not overwritten
 
 ==================================================
-31. DEMO MODE
+12. MANUAL UI CHECK
 ==================================================
 
-Demo mode must remain deterministic.
-
-Do NOT require a Groq API key to run the demo.
-
-Demo:
-
-APP_MODE=demo
-
-must work offline without Groq.
-
-Hybrid:
-
-APP_MODE=hybrid
-
-should use Groq when configured and fallback to Local AI.
-
-This is essential for the hackathon presentation.
-
-
-==================================================
-32. TEST SCENARIOS
-==================================================
-
-Create tests or at minimum development test cases for:
-
-TEST 1 — CHEST PAIN
-
-Input:
-
-"I have chest pain since this morning. It feels like pressure and it is 8 out of 10."
-
-Expected extraction:
-
-chiefComplaint = chest pain
-onset = this morning
-character = pressure
-severity = 8
-
-Do NOT invent:
-radiation
-breathlessness
-sweating
-medical history
-
-
-TEST 2 — INCOMPLETE ANSWER
-
-Input:
-
-"I don't know when it started."
-
-Expected:
-
-onset = null/unknown
-
-Do not invent a date.
-
-
-TEST 3 — HEADACHE
-
-Input:
-
-"I've had a headache for two days and bright light makes it worse."
-
-Expected:
-
-chiefComplaint = headache
-duration = two days
-aggravatingFactors = bright light
-
-
-TEST 4 — ABDOMINAL PAIN
-
-Input:
-
-"My stomach hurts on the right side and I've been vomiting since last night."
-
-Expected:
-
-chiefComplaint = abdominal pain
-site = right side
-associatedSymptoms includes vomiting
-onset/duration information preserved
-
-
-TEST 5 — CONTRADICTION
-
-Earlier:
-
-"I don't have diabetes."
-
-Later:
-
-"I take insulin every morning."
-
-Expected:
-
-possible contradiction flagged.
-
-Do not decide which statement is correct.
-
-
-TEST 6 — GROQ FAILURE
-
-Simulate:
-- missing API key
-- invalid API response
-- network error
-- timeout
-
-Expected:
-
-Local AI fallback
-
-No UI crash.
-
-
-TEST 7 — RED FLAG
-
-Provide a scenario supported by the existing deterministic triage rules.
-
-Expected:
-
-ClinicalState → Triage Rules → appropriate priority.
-
-Do NOT let the LLM directly determine priority.
-
-
-==================================================
-33. PERFORMANCE
-==================================================
-
-Keep Groq requests small.
-
-Do not send the entire conversation history unnecessarily.
-
-Prefer:
-
-Current clinical state
-+
-latest patient answer
-+
-current question
-+
-allowed fields
-+
-relevant question branch
-
-
-Use appropriate token limits.
-
-Set a reasonable timeout.
-
-Do not make unnecessary repeated API calls.
-
-
-==================================================
-34. UI
-==================================================
-
-Do NOT redesign the application.
-
-Do not replace the existing visual style.
-
-Only make minimal UI changes necessary for:
-
-- AI provider status
-- loading state
-- retry
-- fallback
-- transcript handling
-- interview progression
-
-
-Patient-facing UI should remain simple.
-
-
-==================================================
-35. FILE STRUCTURE
-==================================================
-
-Use the existing project structure.
-
-A reasonable structure is:
-
-src/
-  services/
-    ai/
-      aiService.ts
-      localAiInterviewService.ts
-      groqAiInterviewService.ts
-      questionPlanner.ts
-      clinicalQuestions.ts
-      clinicalState.ts
-      aiSchemas.ts
-
-If some of these already exist, improve/reuse them instead of duplicating them.
-
-Server-side proxy should be placed according to the project's existing architecture.
-
-Do not introduce unnecessary folders.
-
-
-==================================================
-36. NO DUPLICATE SERVICES
-==================================================
-
-Before creating anything:
-
-SEARCH THE PROJECT.
-
-Check for existing:
-
-- AI services
-- interview services
-- question planners
-- triage logic
-- clinical types
-- case sheet types
-- API utilities
-- environment configuration
-
-Reuse existing code where appropriate.
-
-Do not create:
-
-aiService2.ts
-mockAi2.ts
-clinicalState2.ts
-groqServiceNew.ts
-
-etc.
-
-
-==================================================
-37. DO NOT BREAK EXISTING FEATURES
-==================================================
-
-After implementation verify:
-
-Patient flow:
+Actually run the application and manually test:
 
 Login
 → Consent
 → Language
 → Input Mode
 → Interview
-→ Assessment
-→ Document
-→ Timeline
-→ Triage
-→ Case Sheet
+→ AYUSH Assessment
 
+Test at least one complete patient journey in English and one in Hindi or Telugu.
 
-Doctor flow:
-
-Login
-→ Dashboard
-→ Patient Detail
-
-
-Integration:
-
-FHIR
-ABDM
-System Status
-
-
-Existing demo scenarios must continue to work.
-
+Verify that the browser console has no runtime errors.
 
 ==================================================
-38. TYPESCRIPT QUALITY
-==================================================
-
-Do not use:
-
-any
-
-unless absolutely unavoidable.
-
-Prefer:
-- interfaces
-- discriminated unions
-- typed API responses
-- schema validation
-- explicit null handling
-
-
-Fix all TypeScript errors.
-
-
-==================================================
-39. ENVIRONMENT CONFIGURATION
-==================================================
-
-Support something like:
-
-APP_MODE=hybrid
-GROQ_MODEL=...
-GROQ_API_KEY=...
-
-
-Use the project's existing environment variable naming conventions if already established.
-
-Do not expose secret variables to Vite client code.
-
-
-==================================================
-40. FINAL VALIDATION
+13. VALIDATION
 ==================================================
 
 Run:
 
 npx tsc --noEmit
 
-Then:
-
 npm run build
 
+Fix all TypeScript/build errors.
 
-Both must pass.
-
-Also search the entire project for:
-
-GROQ_API_KEY
-
-and verify it is not hardcoded.
-
-Search for:
-
-VITE_GROQ
-
-and ensure the secret is NOT exposed through VITE_.
-
+Do not report "done" if only the architecture exists.
 
 ==================================================
-41. FINAL REPORT
+FINAL REPORT
 ==================================================
 
-After implementation, provide a concise but complete report:
+At the end report:
 
-1. Files created
-2. Files modified
-3. Groq model used
-4. How the Groq request flows through the system
-5. How the API key is protected
-6. AI response JSON structure
-7. How adaptive questioning works
-8. How complaint-specific questioning works
-9. How completeness works
-10. How contradictions work
-11. How red-flag triage remains deterministic
-12. How Local AI fallback works
-13. How demo mode works without Groq
-14. How hybrid mode works with Groq
-15. How language selection is handled
-16. Test scenarios/results
-17. TypeScript result
-18. Build result
-19. Any limitations or unfinished parts
+1. Files changed
+2. Interview functionality completed
+3. Language functionality completed
+4. Voice/TTS functionality completed
+5. Groq/fallback status
+6. AYUSH functionality completed
+7. Physician verification status
+8. Tests performed
+9. tsc result
+10. build result
+11. Any remaining blockers
 
 IMPORTANT:
-Do not say "production ready".
-Do not claim clinical validation.
-Do not claim real ABDM connectivity unless actually implemented.
-Do not claim diagnosis capability.
-
-Use accurate wording such as:
-
-"AI-assisted pre-consultation history collection"
-
-and:
-
-"Doctor-verified clinical summary."
-
-
-==================================================
-42. SUCCESS CRITERIA
-==================================================
-
-The implementation is considered successful ONLY if:
-
-[ ] Groq is actually callable through the application
-[ ] API key is not exposed in frontend code
-[ ] Existing AI interface is reused
-[ ] Local AI remains available
-[ ] Hybrid fallback works
-[ ] Groq output is structured JSON
-[ ] Groq output is validated
-[ ] Patient facts are not hallucinated
-[ ] One question is asked at a time
-[ ] Questions adapt to the complaint
-[ ] Already-known information is not repeatedly asked
-[ ] Unknown answers are handled
-[ ] Contradictions can be flagged
-[ ] Red flags remain deterministic
-[ ] ClinicalState is centralized
-[ ] Completeness is calculated
-[ ] Case summary can consume structured data
-[ ] Doctor verification remains mandatory
-[ ] Existing ASR continues working
-[ ] Existing TTS continues working
-[ ] Existing demo mode works without API
-[ ] Existing patient flow works
-[ ] Existing doctor flow works
-[ ] FHIR/ABDM architecture remains intact
-[ ] TypeScript has 0 errors
-[ ] Production build succeeds
-
-Do not stop after merely proving that a Groq API request works.
-
-The actual objective is a working adaptive AI clinical interview engine integrated into the existing MediKiosk architecture.
+- Implement the work; do not just analyze it.
+- Reuse the existing architecture.
+- Do not modify the Document/OCR subsystem except where a shared interface must remain compatible.
+- Do not create duplicate state-management or AI architectures.
+- If something is already implemented correctly, verify it instead of rewriting it.
+```
