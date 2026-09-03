@@ -8,7 +8,9 @@ import { usePatientStore } from "@/store/patientStore";
 import { Header } from "@/components/shared/Header";
 import { StepProgress } from "@/components/shared/StepProgress";
 import { DisclaimerBanner } from "@/components/shared/DisclaimerBanner";
+import { AYUSHRulebook } from "@/components/AYUSHRulebook";
 import { ayushService } from "@/services/ayushService";
+import { getParameter } from "@/lib/ayushRulebook";
 import {
   ArrowRight,
   ArrowLeft,
@@ -16,6 +18,7 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  Info,
 } from "lucide-react";
 
 export default function Assessment() {
@@ -85,13 +88,16 @@ export default function Assessment() {
                     </p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-2xl font-bold text-vintage-gold" style={{ fontFamily: "Georgia, serif" }}>
-                    {validation.completedCount}/{validation.totalCount}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
-                    Parameters
-                  </p>
+                <div className="flex flex-col items-end gap-2">
+                  <div>
+                    <p className="text-2xl font-bold text-vintage-gold" style={{ fontFamily: "Georgia, serif" }}>
+                      {validation.completedCount}/{validation.totalCount}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                      Parameters
+                    </p>
+                  </div>
+                  <AYUSHRulebook currentParameterId={expandedParam || undefined} language={language} />
                 </div>
               </div>
 
@@ -195,25 +201,59 @@ export default function Assessment() {
                       transition={{ duration: 0.2 }}
                     >
                       <CardContent className="pt-0 pb-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {param.options.map((option) => (
-                            <button
-                              key={option.value}
-                              className={`p-3 rounded-lg border text-left text-sm transition-all ${
-                                value === option.value
-                                  ? "bg-vintage-gold/10 border-vintage-gold/30 text-foreground font-medium"
-                                  : "bg-muted/30 border-border hover:border-vintage-gold/20 text-muted-foreground hover:text-foreground"
-                              }`}
-                              onClick={() => handleSelect(param.id, option.value)}
-                            >
-                              <div className="flex items-center gap-2">
-                                {value === option.value && (
-                                  <Check className="w-4 h-4 text-vintage-gold flex-shrink-0" />
+                        {/* Inline Rulebook Snippet */}
+                        {(() => {
+                          const ruleInfo = getParameter(param.id);
+                          return ruleInfo ? (
+                            <div className="mb-3 p-3 rounded-lg bg-vintage-gold/5 border border-vintage-gold/15 flex gap-2">
+                              <Info className="w-3.5 h-3.5 text-vintage-gold mt-0.5 flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                  {ruleInfo.description}
+                                </p>
+                                {ruleInfo.educationalContext && (
+                                  <p className="text-[10px] text-muted-foreground/70 mt-1 leading-relaxed italic">
+                                    {ruleInfo.educationalContext}
+                                  </p>
                                 )}
-                                <span>{localizedOptionLabel(option.label)}</span>
                               </div>
-                            </button>
-                          ))}
+                            </div>
+                          ) : null;
+                        })()}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {param.options.map((option) => {
+                            const ruleInfo = getParameter(param.id);
+                            const ruleOption = ruleInfo?.options.find(
+                              (o) => o.value.toLowerCase() === option.value.toLowerCase() ||
+                                     o.label.toLowerCase().startsWith(option.label.split(" ")[0].toLowerCase())
+                            );
+                            return (
+                              <button
+                                key={option.value}
+                                className={`p-3 rounded-lg border text-left text-sm transition-all ${
+                                  value === option.value
+                                    ? "bg-vintage-gold/10 border-vintage-gold/30 text-foreground font-medium"
+                                    : "bg-muted/30 border-border hover:border-vintage-gold/20 text-muted-foreground hover:text-foreground"
+                                }`}
+                                onClick={() => handleSelect(param.id, option.value)}
+                              >
+                                <div className="flex items-start gap-2">
+                                  {value === option.value && (
+                                    <Check className="w-4 h-4 text-vintage-gold flex-shrink-0 mt-0.5" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <span className="block">{localizedOptionLabel(option.label)}</span>
+                                    {ruleOption?.meaning && (
+                                      <span className="block text-[10px] text-muted-foreground/70 mt-0.5 leading-relaxed font-normal">
+                                        {ruleOption.meaning}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          })}
                         </div>
                       </CardContent>
                     </motion.div>
