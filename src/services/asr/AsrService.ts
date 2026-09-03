@@ -2,6 +2,12 @@ export interface TranscriptionResult {
   text: string;
   isFinal: boolean;
   languageCode: string;
+  /**
+   * ASR error signal (e.g. "no-speech", "not-allowed", "network").
+   * The controller uses this to distinguish recoverable errors from fatal ones.
+   * Absent when the result is a valid transcript.
+   */
+  error?: "no-speech" | "not-allowed" | "network" | "aborted" | "unknown";
 }
 
 export interface AsrService {

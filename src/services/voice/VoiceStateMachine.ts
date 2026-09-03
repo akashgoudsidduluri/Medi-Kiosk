@@ -75,8 +75,8 @@ export class VoiceStateMachine {
     const validTransitions: Record<VoiceState, VoiceState[]> = {
       IDLE: ["QUESTION_READY", "LISTENING", "SPEAKING", "PROCESSING", "COMPLETED", "IDLE"],
       QUESTION_READY: ["SPEAKING", "IDLE", "ERROR", "COMPLETED"],
-      SPEAKING: ["LISTENING", "IDLE", "ERROR"], // Must not go to PROCESSING directly
-      LISTENING: ["PROCESSING", "IDLE", "ERROR"],
+      SPEAKING: ["LISTENING", "IDLE", "ERROR"],
+      LISTENING: ["PROCESSING", "IDLE", "ERROR", "QUESTION_READY"], // QUESTION_READY allows no-speech retry without entering PROCESSING
       PROCESSING: ["QUESTION_READY", "IDLE", "ERROR", "COMPLETED"],
       ERROR: ["QUESTION_READY", "IDLE", "LISTENING"],
       COMPLETED: ["IDLE"],

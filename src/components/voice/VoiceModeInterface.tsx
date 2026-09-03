@@ -1,12 +1,12 @@
 /**
- * VoiceMode Interface
- * 
+ * VoiceModeInterface
+ *
  * Complete hands-free voice conversation experience.
- * - Large central microphone orb
- * - Automatic TTS → ASR → Processing loop
- * - Live transcript and SOCRATES display
- * - Error recovery
- * - Exit/mode switch buttons
+ *
+ * Session-safety under React StrictMode:
+ * - Each mount gets its own sessionId; cleanup only affects that session.
+ * - processPatientResponse reads state from refs (never stale closures).
+ * - Duplicate transcripts / messages are deduplicated per session.
  */
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -27,14 +27,20 @@ import {
   Touchpad,
   AlertCircle,
   ArrowLeft,
-  Loader2,
 } from "lucide-react";
+
+// ── Helpers ───────────────────────────────────────────────────────────────
 
 interface ChatMessage {
   id: string;
   role: "ai" | "patient";
   content: string;
   timestamp: string;
+}
+
+/** Generate a stable question ID from the target field name. */
+function makeQuestionId(field: string | null | undefined): string {
+  return field ? `q-${field}` : `q-${Date.now()}`;
 }
 
 const socratesLabels: Record<string, string> = {
@@ -73,6 +79,8 @@ const toLegacySocrates = (state: Partial<ClinicalState>): SOCRATESResponse => ({
   severity: state.severity != null ? String(state.severity) : "",
 });
 
+// ── Component ─────────────────────────────────────────────────────────────
+
 export default function VoiceModeInterface() {
   const navigate = useNavigate();
   const {
@@ -91,176 +99,282 @@ export default function VoiceModeInterface() {
     activeInterviewTargetField,
   } = usePatientStore();
 
-  // Voice state management
+  // ── UI state (for rendering only) ────────────────────────────────────
   const [voiceState, setVoiceState] = useState<VoiceState>("IDLE");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>(interviewMessages);
-  const [currentQuestion, setCurrentQuestion] = useState(activeInterviewQuestion);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
-  const [completionHandled, setCompletionHandled] = useState(false);
 
+  // ── Refs for Stable Identity & Session Guarding ───────────────────────
   const voiceControllerRef = useRef<VoiceInteractionController | null>(null);
+  const sessionCounterRef = useRef(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const initialized = useRef(false);
+
+  // ── Refs for latest mutable state (avoids stale closures) ─────────────
+  const currentQuestionRef = useRef(activeInterviewQuestion);
+  const clinicalStateRef = useRef(clinicalState);
+  const languageRef = useRef(language);
+  const targetFieldRef = useRef(activeInterviewTargetField);
+  const chiefComplaintRef = useRef(chiefComplaint);
   const isProcessingRef = useRef(false);
-  const lastFinalTranscriptRef = useRef<string>("");
+  const lastFinalTranscriptRef = useRef("");
+  const lastAddedMessageIdRef = useRef("");
+  const completionHandledRef = useRef(false);
+  const processingCounterRef = useRef(0);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
+  // Keep refs in sync with store on every render.
+  currentQuestionRef.current = activeInterviewQuestion;
+  clinicalStateRef.current = clinicalState;
+  languageRef.current = language;
+  targetFieldRef.current = activeInterviewTargetField;
+  chiefComplaintRef.current = chiefComplaint;
 
+  // ── Auto-scroll ──────────────────────────────────────────────────────
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Add message to chat
+  // ── Stable addMessage ────────────────────────────────────────────────
+  // NOTE: setInterviewMessages is called OUTSIDE the setMessages updater
+  // to avoid triggering a Zustand store update during React's commit phase,
+  // which causes the "Cannot update a component while rendering" warning
+  // for DemoSelector (which subscribes to the full store).
   const addMessage = useCallback(
-    (role: "ai" | "patient", content: string) => {
-      const newMsg: ChatMessage = {
-        id: `${Date.now()}-${Math.random()}`,
+    (role: "ai" | "patient", content: string): string => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const msg: ChatMessage = {
+        id,
         role,
         content,
         timestamp: new Date().toISOString(),
       };
 
+      let nextMessages: ChatMessage[] | null = null;
       setMessages((prev) => {
-        const next = [...prev, newMsg];
-        setInterviewMessages(next);
-        return next;
+        // Deduplicate: if the same content was just added, skip.
+        const last = prev[prev.length - 1];
+        if (last && last.role === role && last.content === content) {
+          return prev;
+        }
+        nextMessages = [...prev, msg];
+        return nextMessages;
       });
+
+      // Persist to Zustand store OUTSIDE the updater to avoid
+      // triggering store subscribers during React's commit phase.
+      if (nextMessages) {
+        setInterviewMessages(nextMessages);
+      }
+
+      return id;
     },
-    [setInterviewMessages]
+    [setInterviewMessages],
   );
 
-  // Process patient response through clinical engine
+  // ── processPatientResponse (purely ref-based for closure stability) ───
+  //
+  // This is the clinical processing path shared with Touch mode.
+  // Voice → processAnswer(...) → ClinicalState  (same as Touch)
+  //
   const processPatientResponse = useCallback(
-    async (transcript: string) => {
-      const normalizedTranscript = transcript.trim();
-      if (!normalizedTranscript) return;
+    async (transcript: string, questionId: string) => {
+      const normalized = transcript.trim();
+      if (!normalized) return;
+
+      console.log(`[VOICE TRACE 1] ASR final transcript received: "${normalized}" (${questionId})`);
+
+      // Guard: no duplicate processing (same speech event firing twice)
       if (isProcessingRef.current) {
-        console.warn("[VOICE] duplicate answer submission blocked:", normalizedTranscript);
+        console.warn(`[VOICE] duplicate answer blocked (isProcessing=true): ${normalized}`);
         return;
       }
-      if (lastFinalTranscriptRef.current === normalizedTranscript) {
-        console.warn("[VOICE] repeated final transcript suppressed:", normalizedTranscript);
-        return;
-      }
-      const isLikelyQuestionEcho = currentQuestion && normalizedTranscript.toLowerCase() === currentQuestion.toLowerCase();
-      if (isLikelyQuestionEcho) {
-        console.warn("[VOICE] transcript matched the spoken question; ignoring probable echo:", normalizedTranscript);
-        return;
-      }
-      lastFinalTranscriptRef.current = normalizedTranscript;
+
+      const processingId = ++processingCounterRef.current;
+      const q = currentQuestionRef.current;
+
+      console.log(`[VOICE PROCESS ${processingId}] START session=${sessionCounterRef.current} questionId=${questionId} transcript="${normalized}"`);
+      console.log(`[VOICE PROCESS ${processingId}] currentQuestion="${q}" targetField="${targetFieldRef.current}"`);
+      console.log(`[VOICE PROCESS ${processingId}] clinicalState BEFORE:`, {
+        chiefComplaint: clinicalStateRef.current.chiefComplaint,
+        site: clinicalStateRef.current.site,
+      });
+
+      lastFinalTranscriptRef.current = normalized;
       isProcessingRef.current = true;
-      setIsProcessing(true);
 
       try {
-        console.log("[VOICE] ANSWER_SUBMIT", { transcript: normalizedTranscript, question: currentQuestion });
         const aiService = getAiService();
-        const result = await aiService.processAnswer?.(
-          transcript,
-          currentQuestion,
-          clinicalState,
-          {
-            language,
-            targetField: activeInterviewTargetField || undefined,
-          }
-        ) ?? {
-          updatedState: clinicalState,
+        const baseState = clinicalStateRef.current;
+
+        console.log(`[VOICE PROCESS ${processingId}] calling processAnswer`, {
+          transcript: normalized.substring(0, 40),
+          question: q.substring(0, 40),
+          targetField: targetFieldRef.current || undefined,
+          language: languageRef.current,
+        });
+
+        // Timeout safeguard: if processAnswer hangs (e.g. Groq proxy),
+        // recover after 20 seconds so the interview doesn't get stuck.
+        const PROCESS_ANSWER_TIMEOUT_MS = 20_000;
+        let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+        const result = await Promise.race([
+          // Suppress unhandled rejection if timeout wins the race
+          (aiService.processAnswer?.(normalized, q, baseState, {
+            language: languageRef.current,
+            targetField: targetFieldRef.current || undefined,
+          }) ?? Promise.resolve({
+            updatedState: baseState,
+            nextQuestion: null,
+            providerStatus: "LOCAL" as const,
+          })).catch(() => null),
+          new Promise<null>((resolve) => {
+            timeoutId = setTimeout(() => {
+              console.error(`[VOICE PROCESS ${processingId}] processAnswer TIMED OUT after ${PROCESS_ANSWER_TIMEOUT_MS}ms — this is a REAL timeout`);
+              resolve(null);
+            }, PROCESS_ANSWER_TIMEOUT_MS);
+          }),
+        ]) ?? {
+          updatedState: baseState,
           nextQuestion: null,
           providerStatus: "LOCAL" as const,
         };
 
+        // Cancel timeout if processAnswer resolved first — prevents false timeout log
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        console.log(`[VOICE PROCESS ${processingId}] processAnswer RESOLVED`);
+        console.log(`[VOICE PROCESS ${processingId}] processAnswer result:`, {
+          hasUpdatedState: !!result.updatedState,
+          chiefComplaint: result.updatedState?.chiefComplaint,
+          nextQuestion: result.nextQuestion?.question?.substring(0, 60),
+          nextField: result.nextQuestion?.targetField,
+        });
+
         // Update clinical state
         updateClinicalState(result.updatedState);
         setSOCRATES(toLegacySocrates(result.updatedState));
-        setChiefComplaint(result.updatedState.chiefComplaint || chiefComplaint);
+        setChiefComplaint(
+          result.updatedState.chiefComplaint || chiefComplaintRef.current,
+        );
 
-        // Check if interview is complete
+        console.log(`[VOICE PROCESS ${processingId}] clinicalState UPDATED`, {
+          chiefComplaint: result.updatedState.chiefComplaint,
+          site: result.updatedState.site,
+          onset: result.updatedState.onset,
+        });
+
+        // Check completion
         if (!result.nextQuestion || result.nextQuestion.targetField === "complete") {
           const completionMsg =
             result.nextQuestion?.question ||
             "Thank you. Your medical history is complete.";
+          console.log(`[VOICE PROCESS ${processingId}] INTERVIEW COMPLETE`);
           addMessage("ai", completionMsg);
           setInterviewComplete(true);
+          completionHandledRef.current = true;
           if (voiceControllerRef.current) {
             voiceControllerRef.current.markCompleted();
           }
-          setCompletionHandled(true);
           return;
         }
 
-        // Move to next question
-        setCurrentQuestion(result.nextQuestion.question);
-        setInterviewProgress(result.nextQuestion.question, result.nextQuestion.targetField);
-        addMessage("ai", result.nextQuestion.question);
+        // Next question
+        const nextQ = result.nextQuestion;
+        const nextField = nextQ.targetField;
+        const nextQId = makeQuestionId(nextField);
 
-        // Signal controller to handle next question
+        currentQuestionRef.current = nextQ.question;
+        targetFieldRef.current = nextField;
+        setInterviewProgress(nextQ.question, nextField);
+
+        console.log(`[VOICE PROCESS ${processingId}] NEXT QUESTION: ${nextQId}`, {
+          field: nextField,
+          question: nextQ.question.substring(0, 60),
+        });
+
+        addMessage("ai", nextQ.question);
+
+        // Advance controller: PROCESSING → QUESTION_READY → SPEAKING
+        console.log(`[VOICE PROCESS ${processingId}] PROCESSING -> QUESTION_READY`);
         if (voiceControllerRef.current) {
           await voiceControllerRef.current.markProcessingComplete();
-          await voiceControllerRef.current.handleNextQuestion(
-            result.nextQuestion.question
-          );
+          console.log(`[VOICE PROCESS ${processingId}] calling handleNextQuestion for TTS`);
+          await voiceControllerRef.current.handleNextQuestion(nextQ.question);
         }
       } catch (error) {
-        const errorMsg =
+        console.error(`[VOICE PROCESS ${processingId}] ERROR:`, error);
+        const msg =
           error instanceof Error ? error.message : "Failed to process response";
-        addMessage("ai", `Sorry, there was an error: ${errorMsg}`);
-        setErrorMessage(errorMsg);
+        addMessage("ai", `Sorry, there was an error: ${msg}`);
+        setErrorMessage(msg);
 
-        // Recover by going back to question ready
+        // Recover: go back to question ready so patient can try again
         if (voiceControllerRef.current) {
           await voiceControllerRef.current.markProcessingComplete();
         }
       } finally {
         lastFinalTranscriptRef.current = "";
         isProcessingRef.current = false;
-        setIsProcessing(false);
+        console.log(`[VOICE PROCESS ${processingId}] DONE — isProcessing=false`);
       }
     },
     [
-      currentQuestion,
-      clinicalState,
-      language,
-      activeInterviewTargetField,
+      addMessage,
       updateClinicalState,
       setChiefComplaint,
-      chiefComplaint,
-      addMessage,
       setInterviewComplete,
       setInterviewProgress,
       setSOCRATES,
-    ]
+    ],
   );
 
-  // Initialize voice mode
+  // ── Voice mode initialization (session-safe under StrictMode) ────────
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
+    const sessionId = ++sessionCounterRef.current;
+
+    console.log(`[VOICE] session initialized: ${sessionId}`);
+
+    // Reset session-scoped refs so stale values from a previous StrictMode
+    // session cannot block processing in the new session.
+    lastFinalTranscriptRef.current = "";
+    isProcessingRef.current = false;
+    completionHandledRef.current = false;
 
     const initializeVoiceMode = async () => {
       const asrService = getAsrService();
       const ttsService = getTtsService();
 
       const controller = new VoiceInteractionController(asrService, ttsService, {
-        language,
+        language: languageRef.current,
         onStateChange: setVoiceState,
         onTranscript: (text, isFinal) => {
-          setInterimTranscript(text);
+          // Session guard: ignore transcripts from a superseded session.
+          if (sessionId !== sessionCounterRef.current) return;
+
+          setInterimTranscript(isFinal ? "" : text);
+
           if (isFinal) {
             const normalized = text.trim();
             if (!normalized) return;
-            if (lastFinalTranscriptRef.current === normalized || isProcessingRef.current) {
-              console.warn("[VOICE] final transcript ignored as duplicate:", normalized);
-              return;
-            }
+
+            // Deduplicate within this session
+            if (lastFinalTranscriptRef.current === normalized) return;
             lastFinalTranscriptRef.current = normalized;
+
+            // Add patient message to chat
+            const qId = makeQuestionId(targetFieldRef.current);
             addMessage("patient", normalized);
-            void processPatientResponse(normalized);
+
+            // Process through SAME clinical path as Touch mode
+            void processPatientResponse(normalized, qId);
           }
         },
         onError: (error) => {
+          if (sessionId !== sessionCounterRef.current) return;
           setErrorMessage(error);
           addMessage("ai", error);
         },
@@ -268,12 +382,18 @@ export default function VoiceModeInterface() {
 
       voiceControllerRef.current = controller;
 
-      // Start with first question if available
-      const startQuestion = currentQuestion || "What brings you in today?";
-      lastFinalTranscriptRef.current = "";
-      if (!messages.length) {
+      // Display first question message (only on first mount)
+      const startQuestion = currentQuestionRef.current || "What brings you in today?";
+      if (messages.length === 0) {
         addMessage("ai", startQuestion);
       }
+
+      // CRITICAL: sync currentQuestionRef with the actual first question
+      // so processPatientResponse reads the real question text, not ""
+      currentQuestionRef.current = startQuestion;
+      targetFieldRef.current = targetFieldRef.current || "chiefComplaint";
+
+      console.log(`[VOICE] first question synced: "${startQuestion}" field="${targetFieldRef.current}"`);
 
       // Start voice interaction
       await controller.startVoice(startQuestion);
@@ -282,35 +402,45 @@ export default function VoiceModeInterface() {
     initializeVoiceMode();
 
     return () => {
-      initialized.current = false;
-      if (voiceControllerRef.current) {
-        voiceControllerRef.current.cleanup();
+      console.log(`[VOICE] cleanup for session: ${sessionId} (active: ${sessionCounterRef.current})`);
+      if (sessionId === sessionCounterRef.current) {
+        // This is the active session — clean it up.
+        voiceControllerRef.current?.cleanupSession(sessionId);
+        voiceControllerRef.current = null;
+      } else {
+        // Stale session — do NOT stop the active session's resources.
+        console.warn(`[VOICE] stale session cleanup ignored: ${sessionId}`);
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Switch to Touch mode
-  const switchToTouchMode = () => {
-    if (voiceControllerRef.current) {
-      voiceControllerRef.current.stopVoice();
-      voiceControllerRef.current.cleanup();
+  // ── Mode switching ───────────────────────────────────────────────────
+  const switchToTouchMode = useCallback(() => {
+    const controller = voiceControllerRef.current;
+    if (controller) {
+      controller.stopVoice();
+      controller.cleanup();
+      voiceControllerRef.current = null;
     }
     setInputMode("touch");
-    // Interview component will handle re-rendering with touch mode
-  };
+  }, [setInputMode]);
 
-  // Exit voice
-  const handleExit = () => {
-    if (voiceControllerRef.current) {
-      voiceControllerRef.current.cleanup();
+  const handleExit = useCallback(() => {
+    const controller = voiceControllerRef.current;
+    if (controller) {
+      controller.cleanup();
+      voiceControllerRef.current = null;
     }
     navigate(-1);
-  };
+  }, [navigate]);
 
+  // ── Derived display data ─────────────────────────────────────────────
   const answeredCount = socratesOrder.filter(
-    (field) => clinicalState[field as keyof ClinicalState]
+    (field) => clinicalState[field as keyof ClinicalState],
   ).length;
 
+  // ── Render ───────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen vintage-texture flex flex-col">
       <Header />
@@ -330,7 +460,10 @@ export default function VoiceModeInterface() {
             <Card className="vintage-card flex-1 flex flex-col min-h-[600px]">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg" style={{ fontFamily: "Georgia, serif" }}>
+                  <CardTitle
+                    className="text-lg"
+                    style={{ fontFamily: "Georgia, serif" }}
+                  >
                     Voice Interview
                   </CardTitle>
                   <span className="text-xs font-semibold text-vintage-blue">
@@ -340,18 +473,20 @@ export default function VoiceModeInterface() {
               </CardHeader>
 
               <CardContent className="flex-1 overflow-y-auto px-4 pb-4 space-y-6 flex flex-col">
-                {/* Voice Orb - Main Interface */}
+                {/* Voice Orb */}
                 <div className="flex-1 flex items-center justify-center">
                   <VoiceOrb
                     state={voiceState}
-                    isActive={voiceState !== "IDLE" && voiceState !== "COMPLETED"}
+                    isActive={
+                      voiceState !== "IDLE" && voiceState !== "COMPLETED"
+                    }
                     interimTranscript={interimTranscript}
                   />
                 </div>
 
                 {/* Messages */}
                 <div className="max-h-[200px] overflow-y-auto space-y-2">
-                  {messages.slice(-5).map((msg) => (
+                  {messages.slice(-6).map((msg) => (
                     <motion.div
                       key={msg.id}
                       initial={{ opacity: 0, y: 10 }}
@@ -405,10 +540,7 @@ export default function VoiceModeInterface() {
                     <Touchpad className="w-4 h-4 mr-2" />
                     Switch to Touch
                   </Button>
-                  <Button
-                    variant="ghost"
-                    onClick={handleExit}
-                  >
+                  <Button variant="ghost" onClick={handleExit}>
                     <ArrowLeft className="w-4 h-4 mr-2" />
                     Exit
                   </Button>
@@ -421,7 +553,10 @@ export default function VoiceModeInterface() {
           <div className="lg:col-span-2 flex flex-col">
             <Card className="vintage-card flex-1 flex flex-col">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm" style={{ fontFamily: "Georgia, serif" }}>
+                <CardTitle
+                  className="text-sm"
+                  style={{ fontFamily: "Georgia, serif" }}
+                >
                   Live SOCRATES
                 </CardTitle>
               </CardHeader>
@@ -433,7 +568,9 @@ export default function VoiceModeInterface() {
                     <p className="text-[10px] font-bold text-vintage-blue uppercase">
                       Complaint
                     </p>
-                    <p className="text-sm text-foreground mt-1">{chiefComplaint}</p>
+                    <p className="text-sm text-foreground mt-1">
+                      {chiefComplaint}
+                    </p>
                   </div>
                 )}
 
@@ -448,7 +585,9 @@ export default function VoiceModeInterface() {
                         {socratesLabels[field] || field}
                       </p>
                       <p className="text-sm text-foreground mt-1">
-                        {Array.isArray(value) ? value.join(", ") : String(value)}
+                        {Array.isArray(value)
+                          ? value.join(", ")
+                          : String(value)}
                       </p>
                     </div>
                   );
