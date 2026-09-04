@@ -5,3 +5,5 @@
 node_modules
 dist
 src/convex/_generated
+.ideavo/project
+*.log
